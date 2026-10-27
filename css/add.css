@@ -1,1 +1,109 @@
-/* 入力欄の見た目。担当：入力役 */
+/* 入力欄と編集画面の見た目。担当：入力役。色は style.css の変数だけを使う */
+
+/* ---- 入力欄 ---- */
+.add-form {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px; display: grid; gap: 8px; min-width: 0;
+}
+.add-line { display: flex; gap: 8px; min-width: 0; }
+.add-title,
+.tag-date,
+.tag-newproject,
+.tag-memo,
+.edit-title {
+  font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  min-height: var(--tap); padding: 0 12px; min-width: 0;
+}
+.add-title { flex: 1; font-size: 16px; } /* 16px未満だとiPhoneで拡大されるため */
+.add-title:focus,
+.tag-date:focus,
+.tag-newproject:focus,
+.tag-memo:focus,
+.edit-title:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.add-submit { flex: none; }
+.add-submit:disabled { opacity: .6; }
+
+.add-error { color: var(--danger); font-size: 13px; margin: 0; }
+.add-error:empty { display: none; }
+
+.add-tags,
+.add-more { display: grid; gap: 6px; min-width: 0; }
+
+.tag-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.tag-label {
+  flex: none; width: 5.5em; font-size: 12px; color: var(--muted);
+  line-height: var(--tap); white-space: nowrap;
+}
+.tag-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+
+.chip {
+  min-height: var(--tap); padding: 0 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 14px; cursor: pointer; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip:hover { border-color: var(--accent); }
+.chip.is-on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.chip:focus-visible,
+.add-more-btn:focus-visible,
+.edit-delete:focus-visible,
+.edit-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.tag-date { font-size: 16px; padding: 0 8px; max-width: 100%; }
+.tag-newproject { font-size: 16px; flex: 1 1 10em; }
+.tag-memo { width: 100%; padding: 8px 12px; font-size: 16px; resize: vertical; line-height: 1.5; }
+
+.add-more-btn {
+  justify-self: start; background: none; border: 0; color: var(--accent);
+  min-height: var(--tap); padding: 0 4px; cursor: pointer; font-size: 14px;
+}
+
+/* スマホ：見出しを上に載せて、チップに幅を回す */
+@media (max-width: 480px) {
+  .tag-row { flex-direction: column; gap: 2px; }
+  .tag-label { width: auto; line-height: 1.4; }
+  .tag-chips { width: 100%; }
+}
+
+/* ---- 編集画面 ---- */
+.edit-dialog {
+  border: 0; padding: 0; background: transparent; color: var(--text);
+  width: min(560px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px);
+}
+.edit-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.edit-sheet {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  padding: 16px; display: grid; gap: 14px; max-height: inherit; overflow-y: auto;
+}
+.edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.edit-heading { font-size: 17px; margin: 0; }
+.edit-close {
+  background: none; border: 1px solid var(--line); border-radius: var(--radius);
+  min-height: var(--tap); padding: 0 14px; cursor: pointer;
+}
+.edit-field { display: grid; gap: 6px; min-width: 0; }
+.edit-label { font-size: 12px; color: var(--muted); }
+.edit-control { display: grid; gap: 6px; min-width: 0; }
+.edit-title { width: 100%; font-size: 16px; }
+.edit-seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.edit-date { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.edit-actions { display: flex; justify-content: space-between; gap: 8px; }
+.edit-delete {
+  background: none; border: 1px solid var(--danger); color: var(--danger); border-radius: var(--radius);
+  min-height: var(--tap); padding: 0 14px; cursor: pointer;
+}
+.edit-delete.is-armed { background: var(--danger); color: #fff; font-weight: 600; }
+.edit-actions .primary { min-width: 6em; }
+.edit-actions button:disabled { opacity: .6; }
+
+/* スマホ：下からの全幅シート */
+@media (max-width: 600px) {
+  .edit-dialog {
+    width: 100vw; margin: auto 0 0; max-height: 92dvh;
+  }
+  .edit-sheet {
+    border-radius: 14px 14px 0 0; border-bottom: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+}
