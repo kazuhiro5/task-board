@@ -1,12 +1,19 @@
 // タスクの編集（全項目・状態・削除）。担当：入力役。
 // openEdit(task)：編集画面を開く。<dialog> を画面の上に重ねる（スマホは下からのシート、PCは中央）。
 // 「保存」で変わった項目だけ updateTask。「削除」は2回押し。閉じる・Esc・背景クリックで閉じる。
+// 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
+// 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 import { updateTask, deleteTask, projectNames } from './store.js';
 import { AREAS, SIZES, PRIORITIES, STATUSES } from './constants.js';
 
 const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'size', 'priority', 'memo'];
 
 let dialog = null;
+
+function showError(text) {
+  const box = document.querySelector('#add .add-error') || document.querySelector('.add-error');
+  if (box) box.textContent = text;
+}
 
 function el(tag, props = {}, children = []) {
   const e = document.createElement(tag);
@@ -115,40 +122,32 @@ export function openEdit(task) {
   memoBox.value = v.memo || '';
 
   const delBtn = el('button', { type: 'button', class: 'edit-delete', text: '削除' });
-  delBtn.addEventListener('click', async () => {
+  delBtn.addEventListener('click', () => {
     if (!armed) {
       armed = true;
       delBtn.textContent = 'もう一度押すと削除';
       delBtn.classList.add('is-armed');
       return;
     }
-    delBtn.disabled = true;
-    try {
-      await deleteTask(task.id);
-      dlg.close();
-    } catch (err) {
-      error.textContent = `削除できませんでした（${err.message || err}）`;
-      delBtn.disabled = false;
-    }
+    dlg.close();
+    deleteTask(task.id).catch((err) => {
+      showError(`「${orig.title}」を削除できませんでした（${err.message || err}）`);
+    });
   });
   const closeBtn = el('button', { type: 'button', class: 'edit-close', text: '閉じる', onclick: () => dlg.close() });
-  const saveBtn = el('button', { type: 'submit', class: 'primary', text: '保存' });
+  const saveBtn = el('button', { type: 'submit', class: 'primary', text: '保存' }); // eslint-disable-line no-unused-vars
 
-  form.addEventListener('submit', async (e) => {
+  form.addEventListener('submit', (e) => {
     e.preventDefault();
     v.title = (v.title || '').trim();
     if (!v.title) { error.textContent = 'タスク名を入れてください'; titleInput.focus(); return; }
     const patch = {};
     for (const k of FIELDS) if ((v[k] ?? null) !== (orig[k] ?? null)) patch[k] = v[k];
     if (!Object.keys(patch).length) { dlg.close(); return; }
-    saveBtn.disabled = true;
-    try {
-      await updateTask(task.id, patch);
-      dlg.close();
-    } catch (err) {
-      error.textContent = `保存できませんでした（${err.message || err}）`;
-      saveBtn.disabled = false;
-    }
+    dlg.close();
+    updateTask(task.id, patch).catch((err) => {
+      showError(`「${v.title}」を保存できませんでした（${err.message || err}）`);
+    });
   });
 
   renderStatus();
