@@ -66,17 +66,20 @@ button { font: inherit; color: inherit; }
 .tabs { display: flex; gap: 4px; flex: 1; }
 .tab {
   border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
-  min-height: 36px; padding: 0 16px; cursor: pointer;
+  min-height: var(--tap); padding: 0 16px; cursor: pointer;
 }
 .tab.is-active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
 
 .user { position: relative; }
-.user summary { list-style: none; cursor: pointer; padding: 6px 10px; color: var(--muted); }
+.user summary { list-style: none; cursor: pointer; min-width: var(--tap); min-height: var(--tap); display: grid; place-items: center; color: var(--muted); }
 .user summary::-webkit-details-marker { display: none; }
 .user-menu {
   position: absolute; right: 0; top: 100%; background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 10px; display: grid; gap: 8px; min-width: 220px;
   font-size: 13px; color: var(--muted);
+}
+.user-menu button {
+  min-height: var(--tap); border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius); cursor: pointer;
 }
 
 .view { margin-top: var(--gap); }
