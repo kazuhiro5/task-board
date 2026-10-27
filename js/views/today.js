@@ -39,8 +39,8 @@ export function renderToday(container, tasks, opts) {
     .filter((x) => !isOpen(x) && inScope(x) && x.completedAt && toKey(new Date(x.completedAt)) === t)
     .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
 
-  // 今日の画面で追加したら、やる日＝今日（絞り込み中ならそのプロジェクトも）
-  opts.setContext(projFilter ? { doDate: t, project: projFilter } : { doDate: t });
+  // 今日の画面で名前だけ追加したら受信箱へ（受け入れ基準4）。プロジェクトで絞り込み中だけ、そのプロジェクトを付ける
+  opts.setContext(projFilter ? { project: projFilter } : {});
 
   const chips = projects.length
     ? h('div', { class: 'tb-projs', role: 'group', 'aria-label': '動いているプロジェクト' },

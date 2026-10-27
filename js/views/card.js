@@ -42,10 +42,18 @@ export function compareTasks(a, b) {
   return (a.createdAt || 0) - (b.createdAt || 0);
 }
 
-function toggleDone(task) {
+// 失敗したら、そのカードの下に短いエラーを数秒だけ出す（alert は使わない）
+function showCardError(cardEl, msg) {
+  cardEl.querySelector('.tb-err')?.remove();
+  const err = h('p', { class: 'tb-err', role: 'alert' }, msg);
+  cardEl.append(err);
+  setTimeout(() => err.remove(), 4000);
+}
+
+function toggleDone(task, cardEl) {
   updateTask(task.id, { status: isOpen(task) ? 'done' : 'todo' }).catch((e) => {
-    console.error(e);
-    alert(`保存できませんでした（${e.message || e}）`);
+    console.warn('[task-board] 完了の切り替えに失敗', e);
+    showCardError(cardEl, '保存できませんでした。もう一度押してください');
   });
 }
 
@@ -74,19 +82,20 @@ export function taskCard(task, opts = {}) {
   if (task.size && !hide.has('size')) meta.push(h('span', { class: 'tb-tag tb-size' }, task.size));
 
   const cls = 'tb-card' + (done ? ' is-done' : '') + (opts.dueMark ? ' is-due-entry' : '');
-  return h('div', { class: cls, 'data-id': task.id },
+  const card = h('div', { class: cls, 'data-id': task.id },
     h('button', {
       type: 'button',
       class: 'tb-check',
       'aria-label': done ? '未完了に戻す' : '完了にする',
       'aria-pressed': String(done),
-      onclick: () => toggleDone(task),
+      onclick: () => toggleDone(task, card),
     }, h('span', { class: 'tb-check-mark', 'aria-hidden': 'true' }, done ? '✓' : '')),
     h('button', { type: 'button', class: 'tb-body', onclick: () => openEdit(task) },
       h('span', { class: 'tb-title' }, task.title || '（無題）'),
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,
     ),
   );
+  return card;
 }
 
 // 区分の見出し＋件数。onPick があれば押せる見出しにする（押すと「ここに追加」）
