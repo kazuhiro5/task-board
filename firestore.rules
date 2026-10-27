@@ -1,10 +1,13 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 自分のUIDの場所だけ読み書きできる。
-    // オーナーの初回ログイン後、uid をオーナーのUID 1つに固定する（設計書 5章・決定/0002）。
+    // オーナー（bngutkr8）のUIDの場所だけ、本人がログインしている時に読み書きできる。
+    // 他人がログインしても自分の場所すら作れない（無料枠を使われない）。設計書 5章・決定/0002。
+    // UIDはパスワードではない（知られてもなりすましはできない）ので、公開リポジトリに書いてよい。
     match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if request.auth != null
+        && request.auth.uid == uid
+        && uid == 'jqNME9sRyUaYc71WrgnV0DtOMKb2';
     }
   }
 }
