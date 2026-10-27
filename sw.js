@@ -4,7 +4,7 @@
 // - それ以外（Firestore・ログインの通信など）：横取りしない
 // ファイルを足した・中身を変えた時は VERSION を上げる。上げると全部まとめて入れ替わる（JSの版ずれを防ぐ）。
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const CACHE = `task-board-${VERSION}`;
 const FIREBASE_PREFIX = 'https://www.gstatic.com/firebasejs/11.0.2/';
 
@@ -26,6 +26,7 @@ const APP_FILES = [
   './js/views/today.js',
   './js/views/week.js',
   './js/views/list.js',
+  './js/views/card.js',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -43,11 +44,18 @@ const INDEX_URL = new URL('./index.html', SCOPE).href;
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // 自分のファイルは1つでも取れなければ入れ替えをやめる（中途半端な版を作らない）
+    // 1件ずつ入れ、取れなかったものは飛ばす（cache.addAll は1件の失敗で全部失敗するため）。
+    // 飛ばしたものは、開いた時にネットから取って控えに足す（staleWhileRevalidate / cacheFirst）
     // cache: 'reload' でブラウザのHTTPキャッシュを通さず、必ず最新を取る
-    await cache.addAll(APP_FILES.map((u) => new Request(u, { cache: 'reload' })));
+    const appReqs = APP_FILES.map((u) => new Request(u, { cache: 'reload' }));
     // Firebase の部品は module script と同じく CORS で取る
-    await cache.addAll(FIREBASE_FILES.map((u) => new Request(u, { mode: 'cors', credentials: 'omit' })));
+    const fbReqs = FIREBASE_FILES.map((u) => new Request(u, { mode: 'cors', credentials: 'omit' }));
+    await Promise.all([...appReqs, ...fbReqs].map(async (r) => {
+      try {
+        const res = await fetch(r);
+        if (res.ok) await cache.put(r.url, res);
+      } catch { /* 取れなかったものは飛ばす */ }
+    }));
     await self.skipWaiting();
   })());
 });
@@ -76,9 +84,12 @@ self.addEventListener('fetch', (event) => {
   // 自分の範囲（同じ場所・scope の中）だけを扱う。ほかは横取りしない
   if (url.origin !== SCOPE.origin || !url.href.startsWith(SCOPE.href)) return;
 
-  // ページを開く：控えの index.html を返し、裏で更新する（?demo=1 などの付いたURLも同じ）
+  // ページを開く：範囲の直下（/task-board/）か index.html の時だけ、控えの index.html を返す
+  // （?demo=1 などの付いたURLも同じ）。それ以外のURLをページとして開いた時は横取りしない
   if (req.mode === 'navigate') {
-    event.respondWith(staleWhileRevalidate(event, INDEX_URL, req));
+    if (url.pathname === SCOPE.pathname || url.href.split(/[?#]/)[0] === INDEX_URL) {
+      event.respondWith(staleWhileRevalidate(event, INDEX_URL, req));
+    }
     return;
   }
 
