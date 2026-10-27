@@ -51,7 +51,11 @@ function showCardError(cardEl, msg) {
 }
 
 function toggleDone(task, cardEl) {
-  updateTask(task.id, { status: isOpen(task) ? 'done' : 'todo' }).catch((e) => {
+  // 完了にする時は前の状態（進行中・待ちなど）を prevStatus に残し、戻す時にそこへ戻す
+  const patch = isOpen(task)
+    ? { status: 'done', prevStatus: task.status || 'todo' }
+    : { status: task.prevStatus && task.prevStatus !== 'done' ? task.prevStatus : 'todo' };
+  updateTask(task.id, patch).catch((e) => {
     console.warn('[task-board] 完了の切り替えに失敗', e);
     showCardError(cardEl, '保存できませんでした。もう一度押してください');
   });
