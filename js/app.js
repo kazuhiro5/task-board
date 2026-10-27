@@ -106,6 +106,11 @@ async function boot() {
 
 boot();
 
+// 端末内の保存（Firestoreの控え）を、容量不足などで勝手に消されにくくする
+if (navigator.storage && navigator.storage.persist) {
+  navigator.storage.persisted().then((ok) => { if (!ok) navigator.storage.persist(); }).catch(() => {});
+}
+
 if ('serviceWorker' in navigator && !store.demo) {
   navigator.serviceWorker.register('./sw.js').catch(() => { /* なくても動く */ });
 }
