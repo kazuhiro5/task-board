@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>task-board</title>
+  <meta name="theme-color" content="#1f6feb">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="task-board">
+  <link rel="stylesheet" href="./css/style.css">
+  <link rel="stylesheet" href="./css/add.css">
+  <link rel="stylesheet" href="./css/views.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body>
+  <p id="loading" class="loading">読み込み中…</p>
+
+  <section id="login" class="login" hidden>
+    <h1>task-board</h1>
+    <p>この端末で初めて開く時だけ、Googleでログインします。</p>
+    <button id="signInBtn" type="button" class="primary">Googleでログイン</button>
+    <p id="loginError" class="error" role="alert"></p>
+  </section>
+
+  <div id="appRoot" hidden>
+    <header class="top">
+      <nav id="tabs" class="tabs" aria-label="画面の切り替え"></nav>
+      <details class="user">
+        <summary aria-label="アカウント">⋯</summary>
+        <div class="user-menu">
+          <span id="userBox"></span>
+          <button id="signOutBtn" type="button">ログアウト</button>
+        </div>
+      </details>
+    </header>
+    <section id="add" class="add" aria-label="タスクを追加"></section>
+    <main id="view" class="view"></main>
+  </div>
+</body>
+</html>
