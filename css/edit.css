@@ -49,6 +49,12 @@
 .edit-dialog.is-panel .edit-expand { display: none; }
 /* 一覧の右端がパネルに隠れないよう、開いている間はずらす */
 body.has-detail #appRoot { padding-right: calc(var(--detail-w) + 16px); }
+/* 左の一覧（220px）＋右のパネル（380px）を引くと本文が狭すぎる幅（1100px未満）では、
+   本文をずらさずにパネルを上に重ねる（PR #13 の申し送り：840〜900px で本文が176〜236px になった） */
+@media (max-width: 1099px) {
+  body.has-detail #appRoot { padding-right: 16px; }
+  .edit-dialog.is-panel { box-shadow: -10px 0 30px rgb(0 0 0 / .22); }
+}
 
 /* ---- スマホ・iPad縦：下から半分のシート ---- */
 .edit-dialog.is-sheet {
