@@ -118,7 +118,7 @@
 .tb-day-head.is-picked { background: var(--accent-weak); }
 .tb-day-head .tb-here { margin-left: 0; }
 
-@container tb (min-width: 760px) {
+@container tb (min-width: 950px) {
   /* Googleカレンダーの週表示のように7列 */
   .tb-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
   .tb-day { padding: 0 4px; border-left: 1px solid var(--line); min-height: 50vh; }
@@ -159,6 +159,11 @@
   font-size: 12px; color: var(--muted); white-space: nowrap;
 }
 .tb-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+/* 週の7列の中は狭いので、用途名の文字を隠して点だけにする（読み上げには残る）。
+   7列でない時（縦並び）は文字も出す */
+@container tb (min-width: 950px) {
+  .tb-day .tb-area { font-size: 0; gap: 0; }
+}
 .tb-dot--univ { background: var(--cat-univ, #0072B2); }
 .tb-dot--ai { background: var(--cat-ai, #A8558A); }
 .tb-dot--job { background: var(--cat-job, #D55E00); }
