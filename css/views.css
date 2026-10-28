@@ -54,6 +54,16 @@
   gap: 0; padding: 3px 10px 3px 0; line-height: 1.4; background: none; border: 0; text-align: left; cursor: pointer;
 }
 .tb-title { overflow-wrap: anywhere; }
+/* 内容を開いた行：下向きの印・背景を少し変える。内容は行のすぐ下に、列の幅で折り返す */
+.tb-chev { display: none; flex: none; font-size: 12px; }
+.tb-card.is-expanded { background: var(--accent-weak); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.tb-card.is-expanded .tb-chev { display: inline; color: var(--accent); }
+.tb-memo {
+  flex: 1 0 100%; min-width: 0; margin: 0; padding: 2px 10px 8px 40px;
+  font-size: 13px; line-height: 1.6; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.tb-memo.is-empty { color: var(--muted); }
+.tb-memo a { color: var(--accent); text-decoration: underline; word-break: break-all; }
 .tb-card.is-done { opacity: .55; }
 .tb-card.is-done .tb-title { text-decoration: line-through; }
 .tb-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
@@ -139,6 +149,7 @@
   .tb-day .tb-check { width: 32px; }
   .tb-day .tb-check-mark { width: 8px; height: 8px; font-size: 6px; }
   .tb-day .tb-body { padding-right: 6px; }
+  .tb-day .tb-memo { padding: 0 6px 6px 32px; font-size: 12px; }
   .tb-day .tb-meta { font-size: 11px; gap: 2px 6px; }
 }
 

@@ -257,7 +257,7 @@ export function openEdit(task) {
   }
 
   const memoBox = el('textarea', {
-    class: 'tag-memo', rows: '4', 'aria-label': 'メモ',
+    class: 'tag-memo', rows: '4', placeholder: 'タスクの内容', 'aria-label': '内容',
     oninput: (e) => { v.memo = e.target.value; },
   });
   memoBox.value = v.memo || '';
@@ -316,7 +316,7 @@ export function openEdit(task) {
       field('プロジェクト', [projInput, projChips]),
       phaseField,
       field('優先度', [chipControl('priority', PRIORITIES)]),
-      field('メモ', [memoBox]),
+      field('内容', [memoBox]),
     ]),
     el('div', { class: 'edit-foot' }, [
       error,

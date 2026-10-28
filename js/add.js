@@ -199,7 +199,7 @@ export function mountAdd(container, getContext) {
     if (!open) { more.replaceChildren(); return; }
 
     const memoBox = el('textarea', {
-      class: 'tag-memo', rows: '2', placeholder: 'メモ', 'aria-label': 'メモ',
+      class: 'tag-memo', rows: '2', placeholder: '内容', 'aria-label': '内容',
       oninput: (e) => { memo = e.target.value; },
     });
     memoBox.value = memo;
@@ -207,7 +207,7 @@ export function mountAdd(container, getContext) {
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
       projectRow(),
       simpleRow('priority', '優先度', PRIORITIES),
-      row('メモ', [memoBox]),
+      row('内容', [memoBox]),
     );
   }
 
