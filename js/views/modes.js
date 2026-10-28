@@ -1,4 +1,4 @@
-// 表示の切り替え（リスト／3列／カレンダー／ボード）。一覧とプロジェクトの中で共通に使う。担当：画面役（UI改修）。
+// 表示の切り替え（リスト／3列／カレンダー／ボード）。プロジェクトの中で使う（一覧は list.js の2つのタブ）。担当：画面役（UI改修）。
 // renderModes(tasks, cfg) → 要素
 //   cfg = { scope: 'list'|'project', groupKey, groupKeys, setGroup, baseCtx, setContext, rerender, hide, compact }
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
@@ -248,28 +248,33 @@ function moveTo(task, to, cardEl) {
   });
 }
 
+// カードの下に「→進行中」などのボタンを付ける（ボードと一覧の「進捗」で使う）
+export function addMoves(card, task) {
+  const lab = Object.fromEntries(STATUSES.map((x) => [x.value, x.label]));
+  card.append(h('div', { class: 'tb-moves' },
+    MOVES[task.status || 'todo'].map((to) => h('button', {
+      type: 'button',
+      class: 'tb-move',
+      'data-to': to,
+      onclick: () => moveTo(task, to, card),
+    }, to === 'back' ? '↩ 戻す' : `→${lab[to]}`))));
+  return card;
+}
+
+// 完了の列：新しく終えた順に DONE_LIMIT 件まで。{ items, more } を返す
+export function doneItems(list) {
+  const items = [...list].sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
+  return { items: items.slice(0, DONE_LIMIT), more: Math.max(0, items.length - DONE_LIMIT) };
+}
+
 function boardMode(tasks, cfg) {
   cfg.setContext({ ...cfg.baseCtx });
-  const lab = Object.fromEntries(STATUSES.map((x) => [x.value, x.label]));
   const cols = STATUSES.map(({ value, label: name }) => {
     let items = tasks.filter((x) => (x.status || 'todo') === value);
     let more = 0;
-    if (value === 'done') {
-      items.sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0));
-      more = Math.max(0, items.length - DONE_LIMIT);
-      items = items.slice(0, DONE_LIMIT);
-    } else items.sort(compareTasks);
-    const cards = items.map((x) => {
-      const card = taskCard(x, { hide: ['status'] });
-      card.append(h('div', { class: 'tb-moves' },
-        MOVES[value].map((to) => h('button', {
-          type: 'button',
-          class: 'tb-move',
-          'data-to': to,
-          onclick: () => moveTo(x, to, card),
-        }, to === 'back' ? '↩ 戻す' : `→${lab[to]}`))));
-      return card;
-    });
+    if (value === 'done') ({ items, more } = doneItems(items));
+    else items.sort(compareTasks);
+    const cards = items.map((x) => addMoves(taskCard(x, { hide: ['status'] }), x));
     return h('section', { class: 'tb-bcol tb-bcol--' + value, 'data-status': value },
       sectionHead(name, items.length + more),
       h('div', { class: 'tb-cards' }, cards,
