@@ -5,11 +5,13 @@ import { mountAdd } from './add.js';
 import { renderToday } from './views/today.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
+import { renderProjects } from './views/projects.js';
 
 const VIEWS = {
   today: { label: '今日', render: renderToday },
   week: { label: '週', render: renderWeek },
   list: { label: '一覧', render: renderList },
+  projects: { label: 'プロジェクト', render: renderProjects },
 };
 
 // 画面の状態。ctx は画面から入力欄へ渡す「今開いている分類」（初期値に使う）
