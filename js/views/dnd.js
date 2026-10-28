@@ -194,11 +194,21 @@ function autoScroll() {
   s.raf = requestAnimationFrame(autoScroll);
 }
 
-// 引きずった後の click を1回だけ捨てる（押しただけの時は捨てない）
-function swallowClick() {
-  const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-  window.addEventListener('click', stop, { capture: true, once: true });
-  setTimeout(() => window.removeEventListener('click', stop, true), 400);
+// 引きずり終わりの直後に、離した所へ出る click だけを捨てる（内容が開かないように）。
+// ブラウザが click を出さないこともあるので、待つのは短く（CLICK_MS）、離した所から CLICK_PX 以内の click だけ。
+// それ以外の click（直後に押した完了の丸など）は捨てない
+const CLICK_MS = 60;
+const CLICK_PX = 8;
+function swallowClick(x, y) {
+  const until = performance.now() + CLICK_MS;
+  const stop = (e) => {
+    if (performance.now() > until || Math.hypot(e.clientX - x, e.clientY - y) > CLICK_PX) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.removeEventListener('click', stop, true);
+  };
+  window.addEventListener('click', stop, true);
+  setTimeout(() => window.removeEventListener('click', stop, true), CLICK_MS);
 }
 
 function finish(drop) {
@@ -218,7 +228,7 @@ function finish(drop) {
   for (const el of document.querySelectorAll('.is-drop-ok, .is-drop-no, .is-drop-over, .is-drag-src')) {
     el.classList.remove('is-drop-ok', 'is-drop-no', 'is-drop-over', 'is-drag-src');
   }
-  swallowClick();
+  swallowClick(cur.x, cur.y);
   if (drop && cur.target) {
     cur.cfg.onDrop({ id: cur.id, fromKey: cur.fromKey, toKey: cur.target.key, toZone: cur.target.zone, finalIds: cur.target.finalIds });
   }
