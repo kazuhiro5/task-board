@@ -4,6 +4,7 @@
 /* ---- 形の切り替えは画面幅ではなく本文の幅で決める ----
    PCで詳細の右パネルが開くと本文が狭くなるため（@container tb で判断する） */
 .tb-list, .tb-projects, .tb-week { container: tb / inline-size; }
+.tb-ctab-panel { container: tbp / inline-size; }
 
 /* ---- 共通：区分 ---- */
 .tb-sec { margin: 0 0 18px; min-width: 0; }
@@ -41,9 +42,10 @@
   flex: none; width: 40px; min-height: 40px; display: grid; place-items: center;
   background: none; border: 0; cursor: pointer; padding: 0;
 }
+/* 押せる範囲（.tb-check）は40pxのまま、見た目の丸だけ小さく（2026-10-28 オーナー：半分に） */
 .tb-check-mark {
-  width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted);
-  display: grid; place-items: center; font-size: 12px; line-height: 1; color: var(--on-accent, #fff);
+  width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--muted); box-sizing: border-box;
+  display: grid; place-items: center; font-size: 7px; font-weight: 700; line-height: 1; color: var(--on-accent, #fff);
 }
 .tb-check:hover .tb-check-mark { border-color: var(--accent); }
 .tb-card.is-done .tb-check-mark { background: var(--ok); border-color: var(--ok); }
@@ -96,6 +98,14 @@
   font-size: 13px; font-weight: 700; color: var(--muted);
 }
 .tb-done-box > .tb-cards { margin-top: 4px; }
+/* 「明日」より先の日付の区分と「日付なし」の区切り */
+.tb-ahead .tb-sec-head .tb-sec-title { font-variant-numeric: tabular-nums; }
+.tb-more { margin: 0 0 18px; }
+.tb-divider {
+  display: flex; align-items: center; gap: 10px; margin: 6px 0 12px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+}
+.tb-divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 /* ---- 週 ---- */
 .tb-weeknav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 12px; }
@@ -127,7 +137,7 @@
   .tb-day .tb-cards { gap: 4px; }
   .tb-day .tb-card { font-size: 13px; }
   .tb-day .tb-check { width: 32px; }
-  .tb-day .tb-check-mark { width: 16px; height: 16px; }
+  .tb-day .tb-check-mark { width: 8px; height: 8px; font-size: 6px; }
   .tb-day .tb-body { padding-right: 6px; }
   .tb-day .tb-meta { font-size: 11px; gap: 2px 6px; }
 }
@@ -271,3 +281,51 @@
 .tb-phead { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; min-width: 0; }
 .tb-phead-name { margin: 0; font-size: 18px; min-width: 0; overflow-wrap: anywhere; }
 .tb-back { flex: none; }
+
+/* ---- 一覧：Chrome風のタブ（用途・進捗） ----
+   帯（--strip）の上にタブが並び、選んだタブは下の本文（--panel）と同じ色でつながる。
+   選んでいないタブは帯に沈み、隣どうしの境目に細い縦線 */
+.tb-list { --strip: color-mix(in srgb, var(--line) 55%, var(--bg)); --panel: var(--bg); --tab-r: 10px; }
+.tb-ctabs {
+  display: flex; align-items: flex-end; gap: 0; margin: 0 -16px; padding: 6px 16px 0;
+  background: var(--strip); border-radius: 12px 12px 0 0; overflow: hidden;
+}
+.tb-ctab {
+  position: relative; flex: 0 1 160px; min-width: 0; min-height: var(--tap);
+  display: flex; align-items: center; justify-content: center; padding: 0 18px;
+  border: 0; border-radius: var(--tab-r) var(--tab-r) 0 0; background: transparent;
+  font: inherit; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
+}
+.tb-ctab-label { overflow: hidden; text-overflow: ellipsis; }
+.tb-ctab:not(.is-active):hover { background: color-mix(in srgb, var(--panel) 45%, transparent); color: var(--text); }
+/* 境目の細い縦線（選んだタブの両脇・先頭には出さない） */
+.tb-ctab + .tb-ctab::before {
+  content: ""; position: absolute; left: 0; top: 25%; bottom: 25%; width: 1px; background: var(--muted); opacity: .45;
+}
+.tb-ctab.is-active::before, .tb-ctab.is-active + .tb-ctab::before,
+.tb-ctab:hover::before, .tb-ctab:hover + .tb-ctab::before { opacity: 0; }
+.tb-ctab.is-active {
+  z-index: 1; background: var(--panel); color: var(--text); font-weight: 700;
+}
+/* 選んだタブの下の両端を外側へなだらかに広げる（Chromeのタブの裾） */
+.tb-ctab.is-active::after {
+  content: ""; position: absolute; bottom: 0; left: calc(-1 * var(--tab-r)); right: calc(-1 * var(--tab-r));
+  height: var(--tab-r); pointer-events: none; z-index: -1;
+  background:
+    radial-gradient(circle at 0 0, transparent calc(var(--tab-r) - .5px), var(--panel) var(--tab-r)) left bottom / var(--tab-r) var(--tab-r) no-repeat,
+    radial-gradient(circle at 100% 0, transparent calc(var(--tab-r) - .5px), var(--panel) var(--tab-r)) right bottom / var(--tab-r) var(--tab-r) no-repeat;
+}
+.tb-ctab:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.tb-ctab-panel { background: var(--panel); padding: 14px 0 0; min-width: 0; }
+@media (min-width: 840px) {
+  .tb-ctabs { margin: 0; padding: 6px 12px 0; }
+}
+
+/* ---- 一覧の「進捗」：状態ごと。広い時は4列、狭い時は見出し付きの縦のリスト ---- */
+.tb-prog { display: grid; gap: 4px; }
+.tb-prog .tb-bcol { background: none; padding: 0; }
+.tb-prog .tb-bcol .tb-sec-head { margin-left: 0; }
+@container tbp (min-width: 860px) {
+  .tb-prog { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .tb-prog .tb-bcol { padding: 8px; background: color-mix(in srgb, var(--line) 35%, transparent); }
+}
