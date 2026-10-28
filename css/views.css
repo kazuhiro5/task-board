@@ -1,6 +1,10 @@
 /* 画面（今日・週・一覧・プロジェクト）の見た目。担当：画面役
    色は style.css の変数だけを使う（ダークモードは変数側で切り替わる）。 */
 
+/* ---- 形の切り替えは画面幅ではなく本文の幅で決める ----
+   PCで詳細の右パネルが開くと本文が狭くなるため（@container tb で判断する） */
+.tb-list, .tb-projects, .tb-week { container: tb / inline-size; }
+
 /* ---- 共通：区分 ---- */
 .tb-sec { margin: 0 0 18px; min-width: 0; }
 .tb-sec-head {
@@ -114,7 +118,7 @@
 .tb-day-head.is-picked { background: var(--accent-weak); }
 .tb-day-head .tb-here { margin-left: 0; }
 
-@media (min-width: 900px) {
+@container tb (min-width: 760px) {
   /* Googleカレンダーの週表示のように7列 */
   .tb-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
   .tb-day { padding: 0 4px; border-left: 1px solid var(--line); min-height: 50vh; }
@@ -140,7 +144,7 @@
 }
 .tb-seg-btn.is-active { background: var(--accent); color: var(--on-accent, #fff); font-weight: 600; }
 .tb-groups { display: grid; gap: 4px 20px; }
-@media (min-width: 900px) {
+@container tb (min-width: 700px) {
   .tb-seg { flex: 0 1 460px; }
   .tb-groups { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
 }
@@ -165,7 +169,7 @@
 
 /* ---- 表示の切り替え ---- */
 .tb-modes { margin: 0 0 10px; }
-@media (min-width: 900px) { .tb-modes { max-width: 460px; } }
+@container tb (min-width: 700px) { .tb-modes { max-width: 460px; } }
 .tb-modes .tb-seg-btn { padding: 0 6px; }
 
 /* 用途の絞り込み */
@@ -194,12 +198,12 @@
 .tb-cols-pane { min-width: 0; }
 .tb-cols-head { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 .tb-cols-title { margin: 0; font-size: 15px; overflow-wrap: anywhere; min-width: 0; }
-@media (max-width: 899px) {
-  /* スマホ幅：左の一覧 → 押すとタスク（戻るボタン） */
+/* 右側が約260px取れない幅：左の一覧 → 押すとタスク（戻るボタン）。スマホと同じ形 */
+@container tb (max-width: 519.98px) {
   .tb-cols:not(.is-open) .tb-cols-pane { display: none; }
   .tb-cols.is-open .tb-cols-nav { display: none; }
 }
-@media (min-width: 900px) {
+@container tb (min-width: 520px) {
   .tb-cols { grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
   .tb-cols-nav { border-right: 1px solid var(--line); padding-right: 12px; }
   .tb-cols-back { display: none; }
@@ -210,13 +214,13 @@
   margin: 0 0 14px; padding: 6px 10px 10px; border: 1px dashed var(--line); border-radius: var(--radius);
 }
 .tb-nodate .tb-sec-head { margin-bottom: 4px; }
-@media (min-width: 900px) {
+@container tb (min-width: 700px) {
   .tb-nodate-cards { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
 }
 
 /* ---- ボード ---- */
 .tb-board {
-  display: grid; grid-auto-flow: column; grid-auto-columns: 85%; gap: 12px;
+  display: grid; grid-auto-flow: column; grid-auto-columns: max(220px, 85%); gap: 12px;
   overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory;
   padding-bottom: 8px; max-width: 100%;
 }
@@ -231,14 +235,16 @@
   background: var(--bg); font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 .tb-move:hover { border-color: var(--accent); color: var(--accent); }
-@media (min-width: 900px) {
+/* 列は最低でも約220px。4列が並ばない幅では、ボードの中だけ横にスクロール */
+@container tb (min-width: 560px) { .tb-board { grid-auto-columns: 240px; } }
+@container tb (min-width: 940px) {
   .tb-board { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow-x: visible; }
 }
 
 /* ---- プロジェクト ---- */
 .tb-pgrid { display: grid; gap: 12px; }
-@media (min-width: 700px) { .tb-pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 900px) { .tb-pgrid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); } }
+@container tb (min-width: 520px) { .tb-pgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container tb (min-width: 800px) { .tb-pgrid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); } }
 .tb-pcard {
   display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 0; min-height: 140px;
   padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);

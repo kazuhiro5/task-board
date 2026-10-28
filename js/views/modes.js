@@ -229,11 +229,13 @@ const MOVES = {
   todo: ['doing', 'waiting'],
   doing: ['waiting', 'done'],
   waiting: ['doing', 'done'],
-  done: ['todo'],
+  done: ['back'],
 };
 const DONE_LIMIT = 30; // 完了の列に出す最大数（多すぎると重いので）
 
 function moveTo(task, to, cardEl) {
+  // 完了から戻す時は、チェックを外す時と同じく前の状態（無ければ未着手）へ
+  if (to === 'back') to = task.prevStatus && task.prevStatus !== 'done' ? task.prevStatus : 'todo';
   const patch = to === 'done'
     ? { status: 'done', prevStatus: task.status || 'todo' }
     : { status: to, prevStatus: null };
@@ -265,7 +267,7 @@ function boardMode(tasks, cfg) {
           class: 'tb-move',
           'data-to': to,
           onclick: () => moveTo(x, to, card),
-        }, value === 'done' ? `↩ ${lab[to]}に戻す` : `→${lab[to]}`))));
+        }, to === 'back' ? '↩ 戻す' : `→${lab[to]}`))));
       return card;
     });
     return h('section', { class: 'tb-bcol tb-bcol--' + value, 'data-status': value },

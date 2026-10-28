@@ -62,7 +62,9 @@ export function renderProjects(container, tasks, opts) {
   const sig = JSON.stringify(params);
   if (sig !== lastParams) {
     lastParams = sig;
-    if (params.project) { openName = params.project; resetScope('project'); }
+    // params が変わったら、それに合わせる（タブや左の「プロジェクト」＝{} なら一覧のカードに戻る）
+    openName = params.project || null;
+    resetScope('project');
   }
 
   const projects = summarize(tasks);
