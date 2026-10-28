@@ -15,7 +15,7 @@
   --muted: #59636E;
   --line: #D1D9E0;
   --accent: #1A7F37;
-  --accent-weak: #E6F4EA;
+  --accent-weak: #EBF6EE; /* --accent の文字を載せても比 4.58（#E6F4EA だと 4.47 で基準 4.5 に届かなかった） */
   --on-accent: #FFFFFF; /* --accent の上に載せる文字 */
   --danger: #CF222E;
   --warn: #9A6700;

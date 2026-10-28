@@ -73,6 +73,8 @@ function el(tag, props = {}, html) {
 
 const isEmpty = (o) => !o || Object.keys(o).length === 0;
 
+let addBox = null; // mountAdd の戻り値（{ contextChanged }）
+
 // 画面を切り替える（タブ・左の一覧・画面の中から呼ぶ）
 function navigate(view, params = {}) {
   if (!VIEWS[view]) return;
@@ -85,6 +87,8 @@ function navigate(view, params = {}) {
   if (params.project) state.ctx.project = params.project;
   savePref('view', view);
   render();
+  // 描画の後（画面が setContext した後）に、入力欄のタグ表示を今の文脈に合わせる
+  if (addBox) addBox.contextChanged();
   if (changed) window.scrollTo(0, 0);
 }
 
@@ -217,7 +221,7 @@ function showApp(signedIn) {
 
 async function boot() {
   renderThemeOpts();
-  mountAdd($('#add'), () => state.ctx);
+  addBox = mountAdd($('#add'), () => state.ctx);
   store.subscribe(() => { if (!$('#appRoot').hidden) render(); });
 
   if (store.demo) {

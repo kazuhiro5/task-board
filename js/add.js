@@ -247,6 +247,15 @@ export function mountAdd(container, getContext) {
 
   resetFromContext();
   followKeyboard();
+
+  // app.js から呼ぶ：画面を移って文脈（getContext()）が変わった。
+  // 手で触っていない行だけ今の文脈に合わせて、タグの表示を描き直す（触った行はそのまま）
+  return {
+    contextChanged() {
+      syncContext();
+      renderTags();
+    },
+  };
 }
 
 // スマホ：キーボードが出た時、下に固定した入力欄をキーボードのすぐ上に合わせる。
