@@ -2,9 +2,11 @@
 //
 // タスクの形（設計書 5章）：
 // { id, title, status: 'todo'|'doing'|'waiting'|'done', doDate, dueDate, area, project,
-//   phase, priority, memo, createdAt, updatedAt, completedAt }
+//   phase, priority, memo, order, createdAt, updatedAt, completedAt }
 // 日付は 'YYYY-MM-DD' か null。createdAt などは ミリ秒の数値（端末の時計）。
 // phase：プロジェクトの中のフェーズ（1以上の整数）か null。プロジェクトが無いタスクは null。
+// order：同じ日・区分の中の手動の順番（数。小さいほど上）。無い古いタスクは createdAt を使って並べる（views/sort.js）。
+//   引きずって並べ替えた時は、前後の order の中間を1件だけ書く。
 // （古いタスクに size が残っていることがあるが、画面には出さない。書き換えもしない）
 //
 // プロジェクトの一覧（決定/0007）：users/{uid}/projects/{文書の番号} に { name, phases, updatedAt }。
@@ -89,6 +91,7 @@ function normalize(data) {
     phase: project ? toPhase(data.phase) : null,
     priority: data.priority || null,
     memo: data.memo || '',
+    order: typeof data.order === 'number' && Number.isFinite(data.order) ? data.order : now,
     createdAt: now,
     updatedAt: now,
     completedAt: data.status === 'done' ? now : null,
@@ -106,6 +109,7 @@ export async function updateTask(id, patch) {
   if ('status' in patch) p.completedAt = patch.status === 'done' ? Date.now() : null;
   if ('project' in patch) p.project = patch.project ? String(patch.project).trim() : null;
   if ('phase' in patch) p.phase = toPhase(patch.phase);
+  if ('order' in patch && !(typeof patch.order === 'number' && Number.isFinite(patch.order))) delete p.order;
   if ('project' in patch && !p.project) p.phase = null; // プロジェクトを外したらフェーズも外す
   return backend.update(id, p);
 }
