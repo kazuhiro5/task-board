@@ -27,8 +27,8 @@ const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 const VIEWS = {
   today: { label: '今日', render: renderToday },
   week: { label: '週', render: renderWeek },
-  list: { label: '一覧', render: renderList },
   projects: { label: 'プロジェクト', render: renderProjects },
+  list: { label: '一覧', render: renderList },
 };
 
 // 用途 → 色の変数（css/style.css）。CSS変数に日本語を使わないため英字にしている。
