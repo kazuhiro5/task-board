@@ -10,10 +10,11 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, projectNames } from './store.js';
-import { AREAS, SIZES, PRIORITIES, STATUSES } from './constants.js';
+import { updateTask, deleteTask, projectNames, getPhases } from './store.js';
+import { AREAS, PRIORITIES, STATUSES } from './constants.js';
 
-const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'size', 'priority', 'memo'];
+// size（大中小）はなくした。古いタスクに値が残っていても、ここでは出さず書き換えもしない
+const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'phase', 'priority', 'memo'];
 const WIDE = '(min-width: 840px)';
 
 let dialog = null;
@@ -226,7 +227,7 @@ export function openEdit(task) {
   // プロジェクト：既存から選ぶ＋自由入力
   const projInput = el('input', {
     class: 'tag-newproject', placeholder: 'プロジェクト名（なしは空）', 'aria-label': 'プロジェクト',
-    oninput: (e) => { v.project = e.target.value.trim() || null; renderProj(); },
+    oninput: (e) => { v.project = e.target.value.trim() || null; renderProj(); renderPhase(); },
   });
   projInput.value = v.project || '';
   const projChips = el('div', { class: 'tag-chips' });
@@ -236,11 +237,27 @@ export function openEdit(task) {
       v.project = v.project === p ? null : p;
       projInput.value = v.project || '';
       renderProj();
+      renderPhase();
     })));
   }
 
+  // フェーズ：プロジェクトが付いている時だけ（1…N＋なし）。プロジェクトを外したら phase も null
+  const phaseChips = el('div', { class: 'tag-chips' });
+  const phaseField = field('フェーズ', [phaseChips]);
+  function renderPhase() {
+    if (!v.project) v.phase = null;
+    phaseField.style.display = v.project ? '' : 'none'; // .edit-field は display 指定があり hidden が効かないため
+    if (!v.project) { phaseChips.replaceChildren(); return; }
+    const n = Math.max(getPhases(v.project), v.phase || 0);
+    const opts = Array.from({ length: n }, (_, i) => i + 1);
+    phaseChips.replaceChildren(
+      ...opts.map((o) => chip(String(o), v.phase === o, () => { v.phase = v.phase === o ? null : o; renderPhase(); })),
+      chip('なし', !v.phase, () => { v.phase = null; renderPhase(); }),
+    );
+  }
+
   const memoBox = el('textarea', {
-    class: 'tag-memo', rows: '4', 'aria-label': 'メモ',
+    class: 'tag-memo', rows: '4', placeholder: 'タスクの内容', 'aria-label': '内容',
     oninput: (e) => { v.memo = e.target.value; },
   });
   memoBox.value = v.memo || '';
@@ -280,6 +297,7 @@ export function openEdit(task) {
 
   renderStatus();
   renderProj();
+  renderPhase();
   const [doIn, doNone] = dateControl('doDate', 'やる日');
   const [dueIn, dueNone] = dateControl('dueDate', '締切');
 
@@ -296,9 +314,9 @@ export function openEdit(task) {
       field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
       field('用途', [chipControl('area', AREAS)]),
       field('プロジェクト', [projInput, projChips]),
-      field('大中小', [chipControl('size', SIZES)]),
+      phaseField,
       field('優先度', [chipControl('priority', PRIORITIES)]),
-      field('メモ', [memoBox]),
+      field('内容', [memoBox]),
     ]),
     el('div', { class: 'edit-foot' }, [
       error,

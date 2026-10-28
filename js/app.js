@@ -89,6 +89,7 @@ function navigate(view, params = {}) {
   render();
   // 描画の後（画面が setContext した後）に、入力欄のタグ表示を今の文脈に合わせる
   if (addBox) addBox.contextChanged();
+  ctxSig = JSON.stringify(state.ctx);
   if (changed) window.scrollTo(0, 0);
 }
 
@@ -150,8 +151,21 @@ function renderSide() {
 }
 
 // 画面から呼ぶ：今開いている分類を入力欄の初期値にする（例：{ area: '就活' }）
+// 入力欄のタグの表示も今の文脈に合わせる（手で触った行はそのまま。add.js の contextChanged）。
+// 描画中に何度も呼ばれてもよいように、描画の後にまとめて1回だけ。前と同じ文脈なら何もしない
+let ctxSig = '';
+let ctxQueued = false;
 function setContext(ctx) {
   state.ctx = ctx || {};
+  if (ctxQueued) return;
+  ctxQueued = true;
+  queueMicrotask(() => {
+    ctxQueued = false;
+    const sig = JSON.stringify(state.ctx);
+    if (sig === ctxSig) return;
+    ctxSig = sig;
+    if (addBox) addBox.contextChanged();
+  });
 }
 
 // 画面から呼ぶ：一覧のグループ分けを変える

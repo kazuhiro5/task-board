@@ -71,9 +71,54 @@ function toggleDone(task, cardEl) {
   });
 }
 
+// ---- 内容（memo）を行のすぐ下に伸ばして出す（アコーディオン） ----
+// 1回押す＝開く（ほかの行は閉じる）、開いている行をもう一度押す＝編集（openEdit）。
+// 開いている行のidは覚えておき、画面が描き直されても開いたままにする。
+let openId = null;
+const URL_RE = /(https?:\/\/[^\s<>"'）」』】、。]+)/g;
+
+// 内容の表示。innerHTML は使わず、文字と a 要素だけで組み立てる（改行は CSS の pre-wrap でそのまま出す）
+function memoBox(task, id) {
+  const text = (task.memo || '').trim();
+  if (!text) return h('div', { class: 'tb-memo is-empty', id }, '内容なし（もう一度押すと編集）');
+  const box = h('div', { class: 'tb-memo', id });
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    if (m.index > last) box.append(document.createTextNode(text.slice(last, m.index)));
+    box.append(h('a', { href: m[0], target: '_blank', rel: 'noopener noreferrer' }, m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) box.append(document.createTextNode(text.slice(last)));
+  return box;
+}
+
+function setExpanded(card, task, on) {
+  const btn = card.querySelector('.tb-body');
+  card.classList.toggle('is-expanded', on);
+  btn?.setAttribute('aria-expanded', String(on));
+  card.querySelector(':scope > .tb-memo')?.remove();
+  if (on) {
+    const box = memoBox(task, btn.getAttribute('aria-controls'));
+    btn.after(box);
+  }
+}
+
+function pressBody(task, card) {
+  if (openId === task.id && card.classList.contains('is-expanded')) { openEdit(task); return; }
+  // 前に開いていた行（同じ画面の中）を閉じる
+  for (const c of document.querySelectorAll('.tb-card.is-expanded')) {
+    if (c !== card) setExpanded(c, null, false);
+  }
+  openId = task.id;
+  setExpanded(card, task, true);
+}
+
+let memoSeq = 0;
+
 // タスクの1行。opts.badges：タイトルの前に出す小さな印（例：['持ち越し']）
 //              opts.hide：メタ情報から省く項目（例：['doDate']）
 //              opts.dueMark：締切の日として置いた行（週の画面。〆を目立たせる）
+//              opts.showPhase：フェーズの印（F2 など）を出す（プロジェクトの中だけ）
 export function taskCard(task, opts = {}) {
   const t = todayKey();
   const done = !isOpen(task);
@@ -92,7 +137,9 @@ export function taskCard(task, opts = {}) {
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
-  if (task.size && !hide.has('size')) meta.push(h('span', { class: 'tb-tag tb-size' }, task.size));
+  if (opts.showPhase && task.phase && !hide.has('phase')) {
+    meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));
+  }
 
   const cls = 'tb-card' + (done ? ' is-done' : '') + (opts.dueMark ? ' is-due-entry' : '');
   const card = h('div', { class: cls, 'data-id': task.id },
@@ -103,13 +150,18 @@ export function taskCard(task, opts = {}) {
       'aria-pressed': String(done),
       onclick: () => toggleDone(task, card),
     }, h('span', { class: 'tb-check-mark', 'aria-hidden': 'true' }, done ? '✓' : '')),
-    h('button', { type: 'button', class: 'tb-body', onclick: () => openEdit(task) },
+    h('button', {
+      type: 'button', class: 'tb-body', 'aria-expanded': 'false', 'aria-controls': `tb-memo-${++memoSeq}`,
+      onclick: () => pressBody(task, card),
+    },
       h('span', { class: 'tb-line' },
         task.area && !hide.has('area') ? areaMark(task.area) : null,
-        h('span', { class: 'tb-title' }, task.title || '（無題）')),
+        h('span', { class: 'tb-title' }, task.title || '（無題）'),
+        h('span', { class: 'tb-chev', 'aria-hidden': 'true' }, '▾')),
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,
     ),
   );
+  if (openId === task.id) setExpanded(card, task, true);
   return card;
 }
 

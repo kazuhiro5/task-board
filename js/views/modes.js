@@ -1,16 +1,20 @@
 // 表示の切り替え（リスト／3列／カレンダー／ボード）。プロジェクトの中で使う（一覧は list.js の2つのタブ）。担当：画面役（UI改修）。
 // renderModes(tasks, cfg) → 要素
-//   cfg = { scope: 'list'|'project', groupKey, groupKeys, setGroup, baseCtx, setContext, rerender, hide, compact }
+//   cfg = { scope: 'list'|'project', groupKey, groupKeys, setGroup, baseCtx, setContext, rerender, hide, compact,
+//           phases, onAddPhase }
+//   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
+//   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
 import { updateTask } from '../store.js';
-import { AREAS, SIZES, STATUSES } from '../constants.js';
+import { AREAS, STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot } from './card.js';
 
 // cfg.hide（例：プロジェクトの中では ['project']）を、すべての行に足す
 let extraHide = [];
+let showPhase = false; // プロジェクトの中だけ、行にフェーズの印（F2）を出す
 function taskCard(x, o = {}) {
-  return baseCard(x, { ...o, hide: [...(o.hide || []), ...extraHide] });
+  return baseCard(x, { showPhase, ...o, hide: [...(o.hide || []), ...extraHide] });
 }
 
 export const MODES = [
@@ -58,9 +62,22 @@ function modeBar(scope, mode, rerender) {
 }
 
 // ---- グループ分け（一覧のリスト・3列で使う） ----
-function groupsFor(key, list, showDone) {
+// フェーズの値：1以上の整数だけ。ほかは「フェーズなし」
+const phaseOf = (x) => (Number.isInteger(x.phase) && x.phase >= 1 ? x.phase : NONE);
+
+function groupsFor(key, list, showDone, cfg = {}) {
   if (key === 'area') return { order: AREAS, value: (x) => x.area || NONE, label: (v) => v };
-  if (key === 'size') return { order: SIZES, value: (x) => x.size || NONE, label: (v) => v };
+  if (key === 'phase') {
+    // 1…N（N＝フェーズの数。もっと大きい番号のタスクがあればそこまで）
+    const max = Math.max(cfg.phases || 0, ...list.map((x) => (phaseOf(x) === NONE ? 0 : x.phase)));
+    return {
+      order: Array.from({ length: max }, (_, i) => i + 1),
+      value: phaseOf,
+      label: (v) => `フェーズ${v}`,
+      noneLabel: 'フェーズなし',
+      keepEmpty: true,
+    };
+  }
   if (key === 'status') {
     const order = STATUSES.map((s) => s.value).filter((v) => v !== 'done' || showDone);
     const lab = Object.fromEntries(STATUSES.map((s) => [s.value, s.label]));
@@ -71,15 +88,16 @@ function groupsFor(key, list, showDone) {
 }
 
 // compact：中身のあるグループだけ出す（絞り込み中・プロジェクトの中）
-function bucketize(key, list, showDone, compact) {
-  const g = groupsFor(key, list, showDone);
-  if (compact) g.order = g.order.filter((v) => list.some((x) => g.value(x) === v));
+function bucketize(key, list, showDone, compact, cfg) {
+  const g = groupsFor(key, list, showDone, cfg);
+  if (compact && !g.keepEmpty) g.order = g.order.filter((v) => list.some((x) => g.value(x) === v));
   const buckets = new Map(g.order.map((v) => [v, []]));
   for (const x of list) {
     const v = g.value(x);
     if (!buckets.has(v)) buckets.set(v, []);
     buckets.get(v).push(x);
   }
+  if (g.keepEmpty && !buckets.has(NONE)) buckets.set(NONE, []); // フェーズなし は空でも出す（押して追加できるように）
   if (buckets.has(NONE)) { const n = buckets.get(NONE); buckets.delete(NONE); buckets.set(NONE, n); }
   for (const items of buckets.values()) items.sort(compareTasks);
   return { g, buckets };
@@ -91,9 +109,19 @@ function ctxFor(key, v) {
   return { [key]: v };
 }
 
+// 見出しの番号（選んだ見出しを覚えるため。値が数字でも文字にそろえる）
+const idOf = (key, v) => `${key}:${v === NONE ? '' : v}`;
+const nameOf = (g, v) => (v === NONE ? (g.noneLabel || '未設定') : g.label(v));
+
+// 「＋ フェーズを追加」（cfg.onAddPhase がある時だけ）
+function addPhaseBtn(cfg, cls = '') {
+  if (!cfg.onAddPhase) return null;
+  return h('button', { type: 'button', class: 'tb-btn tb-addphase' + (cls ? ` ${cls}` : ''), onclick: cfg.onAddPhase }, '＋ フェーズを追加');
+}
+
 function groupBar(cfg, s) {
   return h('div', { class: 'tb-listbar' },
-    h('div', { class: 'tb-seg', role: 'group', 'aria-label': 'グループ分け' },
+    !cfg.groupKeys?.length ? null : h('div', { class: 'tb-seg', role: 'group', 'aria-label': 'グループ分け' },
       cfg.groupKeys.map((k) => h('button', {
         type: 'button',
         class: 'tb-seg-btn' + (k.value === cfg.groupKey ? ' is-active' : ''),
@@ -113,40 +141,39 @@ function groupBar(cfg, s) {
 function listMode(tasks, cfg, s) {
   const key = cfg.groupKey;
   const list = s.showDone ? tasks : tasks.filter(isOpen);
-  const { g, buckets } = bucketize(key, list, s.showDone, cfg.compact);
+  const { g, buckets } = bucketize(key, list, s.showDone, cfg.compact, cfg);
 
-  const pickedHere = s.picked && s.picked.startsWith(`${key}:`) ? s.picked.slice(key.length + 1) : null;
-  if (pickedHere !== null && !buckets.has(pickedHere)) s.picked = null;
-  cfg.setContext({ ...cfg.baseCtx, ...(s.picked && pickedHere !== null ? ctxFor(key, pickedHere) : {}) });
+  const pickedV = [...buckets.keys()].find((v) => idOf(key, v) === s.picked);
+  if (pickedV === undefined) s.picked = null;
+  cfg.setContext({ ...cfg.baseCtx, ...(pickedV !== undefined ? ctxFor(key, pickedV) : {}) });
 
   const sections = [...buckets.entries()].map(([v, items]) => {
-    const isPicked = pickedHere === v;
+    const isPicked = pickedV === v;
     return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v },
-      sectionHead(v === NONE ? '未設定' : g.label(v), items.length, {
+      sectionHead(nameOf(g, v), items.length, {
         picked: isPicked,
-        onPick: () => { s.picked = isPicked ? null : `${key}:${v}`; cfg.rerender(); },
+        onPick: () => { s.picked = isPicked ? null : idOf(key, v); cfg.rerender(); },
       }),
       items.length ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] }))) : null);
   });
   return [groupBar(cfg, s),
-    sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
+    sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません'),
+    addPhaseBtn(cfg)];
 }
 
 // ---- 3列：左にグループ、右にそのグループのタスク ----
 function colsMode(tasks, cfg, s) {
   const key = cfg.groupKey;
   const list = s.showDone ? tasks : tasks.filter(isOpen);
-  const { g, buckets } = bucketize(key, list, s.showDone, cfg.compact);
+  const { g, buckets } = bucketize(key, list, s.showDone, cfg.compact, cfg);
   const values = [...buckets.keys()];
-  const prefix = `${key}:`;
-  let cur = s.colPick && s.colPick.startsWith(prefix) ? s.colPick.slice(prefix.length) : null;
-  if (cur === null || !buckets.has(cur)) {
+  let cur = values.find((v) => idOf(key, v) === s.colPick) ?? null;
+  if (cur === null) {
     // 最初はタスクのある最初のグループ
     cur = values.find((v) => buckets.get(v).length) ?? values[0] ?? null;
     s.colOpen = false;
   }
   cfg.setContext({ ...cfg.baseCtx, ...(cur !== null ? ctxFor(key, cur) : {}) });
-  const nameOf = (v) => (v === NONE ? '未設定' : g.label(v));
 
   const nav = h('nav', { class: 'tb-cols-nav', 'aria-label': 'グループ' },
     values.map((v) => h('button', {
@@ -154,17 +181,18 @@ function colsMode(tasks, cfg, s) {
       class: 'tb-cols-item' + (v === cur ? ' is-active' : '') + (buckets.get(v).length ? '' : ' is-empty'),
       'aria-pressed': String(v === cur),
       'data-group-value': v === NONE ? '' : v,
-      onclick: () => { s.colPick = prefix + v; s.colOpen = true; cfg.rerender(); },
+      onclick: () => { s.colPick = idOf(key, v); s.colOpen = true; cfg.rerender(); },
     },
     key === 'area' && v !== NONE ? areaDot(v) : null,
-    h('span', { class: 'tb-cols-name' }, nameOf(v)),
-    h('span', { class: 'tb-count' }, String(buckets.get(v).length)))));
+    h('span', { class: 'tb-cols-name' }, nameOf(g, v)),
+    h('span', { class: 'tb-count' }, String(buckets.get(v).length)))),
+    addPhaseBtn(cfg, 'tb-cols-add'));
 
   const items = cur !== null ? buckets.get(cur) : [];
   const pane = h('section', { class: 'tb-cols-pane' },
     h('div', { class: 'tb-cols-head' },
       h('button', { type: 'button', class: 'tb-btn tb-back tb-cols-back', onclick: () => { s.colOpen = false; cfg.rerender(); } }, '‹ 戻る'),
-      h('h2', { class: 'tb-cols-title' }, cur !== null ? nameOf(cur) : ''),
+      h('h2', { class: 'tb-cols-title' }, cur !== null ? nameOf(g, cur) : ''),
       h('span', { class: 'tb-count' }, String(items.length))),
     items.length
       ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] })))
@@ -288,6 +316,7 @@ export function renderModes(tasks, cfg) {
   const s = st(cfg.scope);
   const mode = loadMode(cfg.scope);
   extraHide = cfg.hide || [];
+  showPhase = cfg.scope === 'project';
   const body = mode === 'cols' ? colsMode(tasks, cfg, s)
     : mode === 'cal' ? calMode(tasks, cfg, s)
       : mode === 'board' ? boardMode(tasks, cfg)

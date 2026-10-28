@@ -1,6 +1,5 @@
 // 分類の選択肢。表示の順番もこの並び。
 export const AREAS = ['大学', 'AI開発', '就活', 'バイト', '家事', '勉強'];
-export const SIZES = ['大', '中', '小'];
 export const PRIORITIES = ['高', '中', '低'];
 export const STATUSES = [
   { value: 'todo', label: '未着手' },
@@ -9,11 +8,3 @@ export const STATUSES = [
   { value: 'done', label: '完了' },
 ];
 export const STATUS_LABEL = Object.fromEntries(STATUSES.map((s) => [s.value, s.label]));
-
-// 一覧画面のグループ分けの軸
-export const GROUP_KEYS = [
-  { value: 'area', label: '用途' },
-  { value: 'project', label: 'プロジェクト' },
-  { value: 'size', label: '大中小' },
-  { value: 'status', label: '状態' },
-];
