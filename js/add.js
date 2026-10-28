@@ -4,12 +4,13 @@
 // タグは行ごとに1つだけ選べる（もう一度押すと解除）。何も選ばなければ受信箱に入る（store側）。
 // 初期値は getContext() から作る。手で触っていない行は、フォーカスした時・追加する瞬間に読み直す
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
+// フェーズの行は、プロジェクトの中にいる時（getContext() に project がある時）だけ出す。初期値は getContext().phase。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
-import { addTask, projectNames } from './store.js';
-import { AREAS, SIZES, PRIORITIES, STATUSES } from './constants.js';
+import { addTask, projectNames, getPhases } from './store.js';
+import { AREAS, PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
 
-const KEYS = ['doDate', 'dueDate', 'area', 'project', 'size', 'priority'];
+const KEYS = ['doDate', 'dueDate', 'area', 'project', 'phase', 'priority'];
 const MAX_PROJECTS = 6;
 
 function el(tag, props = {}, children = []) {
@@ -151,6 +152,13 @@ export function mountAdd(container, getContext) {
     return row(label, opts.map((v) => chip(v, sel[key] === v, () => pick(key, v))));
   }
 
+  // フェーズ（1…N）。N はそのプロジェクトのフェーズの数
+  function phaseRow(project) {
+    const n = Math.max(getPhases(project), sel.phase || 0);
+    const opts = Array.from({ length: n }, (_, i) => i + 1);
+    return row('フェーズ', opts.map((v) => chip(String(v), sel.phase === v, () => pick('phase', v))));
+  }
+
   function projectRow() {
     const names = projectNames().slice(0, MAX_PROJECTS);
     if (sel.project && !names.includes(sel.project)) names.unshift(sel.project);
@@ -180,9 +188,11 @@ export function mountAdd(container, getContext) {
       dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]]),
       simpleRow('area', '用途', AREAS),
     );
+    const ctxProject = readContext().project;
+    if (ctxProject) tags.append(phaseRow(ctxProject));
 
     // 閉じていても、選択中のものがあれば分かるように件数を出す
-    const hidden = ['dueDate', 'project', 'size', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0);
+    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0);
     moreBtn.textContent = open ? 'たたむ ▴' : `もっと ▾${hidden ? `（${hidden}）` : ''}`;
     moreBtn.setAttribute('aria-expanded', String(open));
     more.hidden = !open;
@@ -196,7 +206,6 @@ export function mountAdd(container, getContext) {
     more.replaceChildren(
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
       projectRow(),
-      simpleRow('size', '大中小', SIZES),
       simpleRow('priority', '優先度', PRIORITIES),
       row('メモ', [memoBox]),
     );
@@ -230,6 +239,8 @@ export function mountAdd(container, getContext) {
     const ctx = syncContext();
     const data = { title: name };
     for (const k of KEYS) if (sel[k]) data[k] = sel[k];
+    // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
+    if (!ctx.project || !data.project) delete data.phase;
     if (memo.trim()) data.memo = memo.trim();
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;
 

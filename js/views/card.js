@@ -74,6 +74,7 @@ function toggleDone(task, cardEl) {
 // タスクの1行。opts.badges：タイトルの前に出す小さな印（例：['持ち越し']）
 //              opts.hide：メタ情報から省く項目（例：['doDate']）
 //              opts.dueMark：締切の日として置いた行（週の画面。〆を目立たせる）
+//              opts.showPhase：フェーズの印（F2 など）を出す（プロジェクトの中だけ）
 export function taskCard(task, opts = {}) {
   const t = todayKey();
   const done = !isOpen(task);
@@ -92,7 +93,9 @@ export function taskCard(task, opts = {}) {
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
-  if (task.size && !hide.has('size')) meta.push(h('span', { class: 'tb-tag tb-size' }, task.size));
+  if (opts.showPhase && task.phase && !hide.has('phase')) {
+    meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));
+  }
 
   const cls = 'tb-card' + (done ? ' is-done' : '') + (opts.dueMark ? ' is-due-entry' : '');
   const card = h('div', { class: cls, 'data-id': task.id },
