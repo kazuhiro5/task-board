@@ -202,10 +202,19 @@ export function mountAdd(container, getContext) {
     );
   }
 
+  // 開閉（スマホだけ効く。PCは CSS で常に全部見せる）：
+  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後に畳む（1行目だけ残る）
+  function setOpen(v) { container.classList.toggle('is-open', v); }
+  title.addEventListener('click', () => setOpen(true));
+  document.addEventListener('pointerdown', (e) => {
+    if (!container.contains(e.target)) setOpen(false);
+  });
+
   title.addEventListener('focus', () => {
     // 画面が変わると初期値も変わる。手で選んだ行は消さない
     syncContext();
     renderTags();
+    setOpen(true);
   });
   title.addEventListener('input', () => { error.textContent = ''; });
 
@@ -230,10 +239,29 @@ export function mountAdd(container, getContext) {
     lastAdd = Date.now();
     resetFromContext();
     title.focus();
+    setOpen(false); // 続けて入れられるようにフォーカスは残し、タグだけ畳む（もう一度押すと開く）
     addTask(data).catch((err) => {
       error.textContent = `「${name}」を追加できませんでした（${err.message || err}）`;
     });
   });
 
   resetFromContext();
+  followKeyboard();
+}
+
+// スマホ：キーボードが出た時、下に固定した入力欄をキーボードのすぐ上に合わせる。
+// 見えている範囲（visualViewport）と画面全体の差を --kb に入れ、CSS が使う
+function followKeyboard() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  const root = document.documentElement;
+  const sync = () => {
+    const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    root.style.setProperty('--kb', `${kb}px`);
+    root.style.setProperty('--vvh', `${Math.round(vv.height)}px`);
+    root.classList.toggle('kb-open', kb > 80);
+  };
+  vv.addEventListener('resize', sync);
+  vv.addEventListener('scroll', sync);
+  sync();
 }

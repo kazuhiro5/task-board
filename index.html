@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>task-board</title>
-  <meta name="theme-color" content="#1f6feb">
+  <meta name="theme-color" content="#1A7F37">
+  <script>
+    // ちらつき防止：CSSより前に、保存した明るさを <html data-theme> に付ける（なし＝端末に合わせる）
+    try { var t = localStorage.getItem('tb.theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  </script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/icon-180.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,19 +29,27 @@
     <p id="loginError" class="error" role="alert"></p>
   </section>
 
-  <div id="appRoot" hidden>
-    <header class="top">
-      <nav id="tabs" class="tabs" aria-label="画面の切り替え"></nav>
-      <details class="user">
-        <summary aria-label="アカウント">⋯</summary>
-        <div class="user-menu">
-          <span id="userBox"></span>
-          <button id="signOutBtn" type="button">ログアウト</button>
-        </div>
-      </details>
-    </header>
-    <section id="add" class="add" aria-label="タスクを追加"></section>
-    <main id="view" class="view"></main>
+  <div id="appRoot" class="shell" hidden>
+    <aside id="side" class="side" aria-label="画面と分類"></aside>
+    <div class="main">
+      <header class="top">
+        <h1 id="topTitle" class="top-title"></h1>
+        <details class="user">
+          <summary aria-label="メニュー">⋯</summary>
+          <div class="user-menu">
+            <span id="userBox"></span>
+            <fieldset class="theme-pick">
+              <legend>明るさ</legend>
+              <div id="themeOpts" class="theme-opts"></div>
+            </fieldset>
+            <button id="signOutBtn" type="button">ログアウト</button>
+          </div>
+        </details>
+      </header>
+      <section id="add" class="add" aria-label="タスクを追加"></section>
+      <main id="view" class="view"></main>
+    </div>
+    <nav id="tabbar" class="tabbar" aria-label="画面の切り替え"></nav>
   </div>
 </body>
 </html>
