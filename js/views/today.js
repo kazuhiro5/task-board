@@ -3,8 +3,13 @@
 // 上から 期限切れ → 今日（持ち越し含む） → 明日 → それ以降（日付ごと） → 進行中 → 受信箱 → 今日終えたもの。
 // 1つのタスクは上の区分の1か所だけに出す（設計書 6章）。
 // 「明日」より先は、やる日（doDate）があればその日、なければ締切（dueDate）の日に置く。
+// 引きずって動かす：「今日」「明日」「日付ごとの見出し」へ落とすと、やる日をその日に。同じ区分の中の上下は順番（order）。
+//   期限切れ・進行中・受信箱・今日終えたもの へは落とせない。受信箱・進行中からは引きずり出せる（期限切れは動かしても期限切れに残るので動かさない）
+// 上に「並び替え▼」（tb.sort.today）。各区分の中の並びにだけ効く。
 import { todayKey, toKey, addDays, label } from '../dates.js';
-import { h, isOpen, compareTasks, taskCard, sectionHead } from './card.js';
+import { h, isOpen, taskCard, sectionHead } from './card.js';
+import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
+import { enableDrag, dropToDay } from './dnd.js';
 
 const AHEAD = 14; // 最初に出すのは何日先まで（それより先は「もっと見る」）
 
@@ -12,10 +17,21 @@ let projFilter = null; // 「動いているプロジェクト」で絞り込み
 let doneOpen = false; // 「今日終えたもの」を開いているか
 let showFar = false; // 15日先以降も出しているか
 
-function section(title, list, cardOpts, attrs = {}) {
-  return h('section', { class: 'tb-sec', ...attrs },
-    sectionHead(title, list.length),
-    list.length ? h('div', { class: 'tb-cards' }, list.map((x) => taskCard(x, cardOpts?.(x)))) : null,
+// drop：落とせる区分の名前（'today' 'tomorrow' 日付）。noDrop：落とせない区分の名前。fixed：行を引きずれない
+function section(title, list, cardOpts, attrs = {}, dnd = {}) {
+  const cards = list.map((x) => {
+    const c = taskCard(x, cardOpts?.(x));
+    if (dnd.fixed) c.dataset.drag = 'no';
+    return c;
+  });
+  return h('section', {
+    class: 'tb-sec',
+    ...attrs,
+    'data-drop': dnd.drop || dnd.noDrop,
+    'data-drop-ok': !!dnd.drop,
+  },
+  sectionHead(title, list.length),
+  list.length ? h('div', { class: 'tb-cards' }, cards) : null,
   );
 }
 
@@ -28,6 +44,8 @@ export function renderToday(container, tasks, opts) {
   const tomorrow = addDays(t, 1);
   const limit = addDays(t, AHEAD);
   const open = tasks.filter(isOpen);
+  const mode = loadSort('today');
+  const cmp = sorter(mode);
 
   // 動いているプロジェクト（未完了がある）
   const projCount = new Map();
@@ -38,7 +56,7 @@ export function renderToday(container, tasks, opts) {
   const inScope = (x) => !projFilter || x.project === projFilter;
   const used = new Set();
   const take = (pred) => {
-    const list = open.filter((x) => !used.has(x.id) && inScope(x) && pred(x)).sort(compareTasks);
+    const list = open.filter((x) => !used.has(x.id) && inScope(x) && pred(x)).sort(cmp);
     for (const x of list) used.add(x.id);
     return list;
   };
@@ -68,9 +86,12 @@ export function renderToday(container, tasks, opts) {
   // 今日の画面で名前だけ追加したら受信箱へ（受け入れ基準4）。プロジェクトで絞り込み中だけ、そのプロジェクトを付ける
   opts.setContext(projFilter ? { project: projFilter } : {});
 
+  const topBar = h('div', { class: 'tb-today-top' },
+    projects.length ? h('span', { class: 'tb-projs-label' }, '動いているプロジェクト') : null,
+    sortSelect('today', mode, () => opts.rerender()));
+
   const chips = projects.length
     ? h('div', { class: 'tb-projs', role: 'group', 'aria-label': '動いているプロジェクト' },
-      h('span', { class: 'tb-projs-label' }, '動いているプロジェクト'),
       projects.map((p) => h('button', {
         type: 'button',
         class: 'tb-chip' + (projFilter === p ? ' is-active' : ''),
@@ -86,7 +107,7 @@ export function renderToday(container, tasks, opts) {
     : null;
 
   const ahead = h('div', { class: 'tb-ahead', 'aria-label': 'それ以降' },
-    shownDays.map((d) => section(label(d), byDay.get(d), dayCard, { 'data-day': d })),
+    shownDays.map((d) => section(label(d), byDay.get(d), dayCard, { 'data-day': d }, { drop: d })),
     farCount
       ? h('button', {
         type: 'button',
@@ -101,16 +122,35 @@ export function renderToday(container, tasks, opts) {
     doneToday.length ? h('div', { class: 'tb-cards' }, doneToday.map((x) => taskCard(x))) : h('p', { class: 'tb-empty' }, 'まだありません'));
   doneBox.addEventListener('toggle', () => { doneOpen = doneBox.open; });
 
-  container.replaceChildren(h('div', { class: 'tb-today' },
+  doneBox.dataset.drop = 'done';
+
+  const root = h('div', { class: 'tb-today' },
+    topBar,
     chips,
     filterBar,
-    section('期限切れ', overdue, null, { 'data-sec': 'overdue' }),
-    section('今日', today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today' }),
-    section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }),
+    section('期限切れ', overdue, null, { 'data-sec': 'overdue' }, { noDrop: 'overdue', fixed: true }),
+    section('今日', today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today' }, { drop: 'today' }),
+    section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,
     h('h2', { class: 'tb-divider' }, '日付なし'),
-    section('進行中', doing, null, { 'data-sec': 'doing' }),
-    section('受信箱', inbox, null, { 'data-sec': 'inbox' }),
+    section('進行中', doing, null, { 'data-sec': 'doing' }, { noDrop: 'doing' }),
+    section('受信箱', inbox, null, { 'data-sec': 'inbox' }, { noDrop: 'inbox' }),
     doneBox,
-  ));
+  );
+
+  // 区分の名前 → やる日
+  const dateOf = (k) => (k === 'today' ? t : k === 'tomorrow' ? tomorrow : /^\d{4}-\d{2}-\d{2}$/.test(k) ? k : null);
+  const setManual = () => { saveSort('today', 'manual'); opts.rerender(); };
+  enableDrag(root, {
+    rootSel: '.tb-today',
+    onDrop: (ev) => dropToDay(ev, { mode: loadSort('today'), sameZoneSetsDate: false, dateOf, setManual }),
+    // Alt+←/→：前後の日へ（今日より前には戻さない。受信箱・進行中からは → で今日へ）
+    onKey: (id, key, dir) => {
+      const from = dateOf(key);
+      const day = from ? addDays(from, dir) : dir > 0 ? t : null;
+      if (!day || day < t) return;
+      dropToDay({ id, fromKey: key, toKey: day, finalIds: [id] }, { mode: loadSort('today'), sameZoneSetsDate: false, dateOf, setManual });
+    },
+  });
+  container.replaceChildren(root);
 }
