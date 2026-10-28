@@ -1,4 +1,4 @@
-// 画面（今日・週・一覧）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
+// 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
 import { updateTask } from '../store.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
@@ -21,6 +21,16 @@ export function h(tag, attrs = {}, ...children) {
 }
 
 export const isOpen = (t) => t.status !== 'done';
+
+// 用途の点（色だけに頼らないよう、使う所では用途名の文字と一緒に出す）
+const AREA_KEY = { 大学: 'univ', AI開発: 'ai', 就活: 'job', バイト: 'work', 勉強: 'study', 家事: 'home' };
+export function areaDot(area) {
+  return h('span', { class: `tb-dot tb-dot--${AREA_KEY[area] || 'none'}`, 'aria-hidden': 'true' });
+}
+// 行の先頭に置く「● 用途名」
+export function areaMark(area) {
+  return h('span', { class: 'tb-area' }, areaDot(area), area);
+}
 
 // 'YYYY-MM-DD' → '10/30'
 export function md(key) {
@@ -81,7 +91,6 @@ export function taskCard(task, opts = {}) {
     meta.push(h('span', { class: 'tb-tag tb-due' + (over ? ' is-over' : '') }, `〆${md(task.dueDate)}`));
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
-  if (task.area && !hide.has('area')) meta.push(h('span', { class: 'tb-tag' }, task.area));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
   if (task.size && !hide.has('size')) meta.push(h('span', { class: 'tb-tag tb-size' }, task.size));
 
@@ -95,7 +104,9 @@ export function taskCard(task, opts = {}) {
       onclick: () => toggleDone(task, card),
     }, h('span', { class: 'tb-check-mark', 'aria-hidden': 'true' }, done ? '✓' : '')),
     h('button', { type: 'button', class: 'tb-body', onclick: () => openEdit(task) },
-      h('span', { class: 'tb-title' }, task.title || '（無題）'),
+      h('span', { class: 'tb-line' },
+        task.area && !hide.has('area') ? areaMark(task.area) : null,
+        h('span', { class: 'tb-title' }, task.title || '（無題）')),
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,
     ),
   );
