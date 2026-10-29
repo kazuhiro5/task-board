@@ -11,7 +11,9 @@
 // deletedAt：ゴミ箱に入れた時刻（ミリ秒）。あるタスクは getTasks／subscribe に出さない（getTrash だけに出す）。
 //   起動時に、30日より前に消したものを完全に消す（1回の起動で PURGE_MAX 件まで）。
 // repeat：繰り返し（js/repeat.js）。完了にした時、次の回のタスクを新しく作り、その id を completedNextId に覚える。
-//   完了を戻した時、次の回がまだ未着手ならゴミ箱へ入れる。
+//   次の回は必ず今日以降。文書の番号は「元の id＋'_'＋次のやる日」に決めるので、同じ回は二重にできない
+//   （完了→戻す→完了を繰り返しても、2台から同時に完了しても1件。あれば作らず、ゴミ箱にあれば戻す）。
+//   完了を戻した時、次の回が一度も触られていなければ（createdAt＝updatedAt）完全に消し、未着手で触られていればゴミ箱へ。
 //
 // プロジェクトの一覧（決定/0007）：users/{uid}/projects/{文書の番号} に { name, phases, updatedAt }。
 // 文書の番号は encodeURIComponent(名前)（「大学/ゼミ」の / がパスの区切りにならないように。「.」も %2E に）。
@@ -103,9 +105,12 @@ export function addArea(raw) {
   const used = new Set(list.map((a) => a.color));
   const extra = list.length - AREAS.length;
   const color = SPARE_COLORS.find((c) => !used.has(c)) || SPARE_COLORS[Math.max(0, extra) % SPARE_COLORS.length];
-  areaList = [...list, { name, color }];
+  const item = { name, color };
+  // 文書がまだ無い時は、決まった6つも一緒に入れる（同じ形の要素は arrayUnion が重ねない）
+  const add = areaList ? [item] : [...list, item];
+  areaList = [...list, item];
   emit();
-  return backend.setAreas(areaList);
+  return backend.addAreas(add);
 }
 
 // プロジェクトを作る（タスク0件でも一覧に出す）。同じ名前は作らない。addArea と同じくその場で Error を投げる
@@ -188,13 +193,19 @@ export async function updateTask(id, patch) {
     const nowDone = patch.status === 'done';
     const rep = 'repeat' in patch ? p.repeat : normRepeat(cur.repeat);
     if (!wasDone && nowDone && rep) {
-      const nid = backend.newId();
-      ops.push({ type: 'set', id: nid, data: nextOf({ ...cur, ...p }, rep) });
+      const next = nextOf({ ...cur, ...p }, rep);
+      const nid = `${id}_${next.doDate}`;
+      const have = allTasks.find((x) => x.id === nid);
+      if (!have) ops.push({ type: 'set', id: nid, data: next });
+      else if (have.deletedAt) ops.push({ type: 'update', id: nid, data: { deletedAt: null, updatedAt: Date.now() } });
       p.completedNextId = nid;
     } else if (wasDone && !nowDone && cur.completedNextId) {
       const nx = allTasks.find((x) => x.id === cur.completedNextId);
       if (nx && !nx.deletedAt && (nx.status || 'todo') === 'todo') {
-        ops.push({ type: 'update', id: nx.id, data: { deletedAt: Date.now(), updatedAt: Date.now() } });
+        const untouched = nx.createdAt && nx.createdAt === nx.updatedAt;
+        ops.push(untouched
+          ? { type: 'delete', id: nx.id }
+          : { type: 'update', id: nx.id, data: { deletedAt: Date.now(), updatedAt: Date.now() } });
       }
       p.completedNextId = null;
     }
@@ -204,11 +215,13 @@ export async function updateTask(id, patch) {
   return backend.batch(ops);
 }
 
-// 次の回：同じ名前・分類・内容・繰り返しで、やる日を次の日に。締切があれば同じ日数だけずらす。
-// やる日が無ければ今日を基準にする
+// 次の回：同じ名前・分類・内容・繰り返しで、やる日を次の日に。締切があれば同じ日数だけずらす（やる日と締切の差を保つ）。
+// やる日が無ければ今日を基準にする。計算した日が今日より前なら、規則どおり進めて今日以降の最初の回にする（今日を含む）
 function nextOf(t, rep) {
-  const base = t.doDate || todayKey();
-  const doDate = nextDate(rep, base);
+  const today = todayKey();
+  const base = t.doDate || today;
+  let doDate = nextDate(rep, base);
+  if (doDate < today) doDate = nextDate(rep, addDays(today, -1));
   const shift = daysBetween(base, doDate);
   return normalize({
     title: t.title,
@@ -269,7 +282,7 @@ function chunks(ops) {
 async function firestoreBackend(uid) {
   const { db } = await import('./firebase.js');
   const {
-    collection, doc, addDoc, updateDoc, setDoc, onSnapshot, writeBatch,
+    collection, doc, addDoc, updateDoc, setDoc, onSnapshot, writeBatch, arrayUnion,
   } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
   const col = collection(db, 'users', uid, 'tasks');
   const unsub = onSnapshot(col, { includeMetadataChanges: false }, (snap) => {
@@ -302,7 +315,6 @@ async function firestoreBackend(uid) {
   return {
     add: (t) => addDoc(col, t).then((r) => r.id),
     update: (id, p) => updateDoc(doc(col, id), p),
-    newId: () => doc(col).id,
     // ops = [{ type: 'set'|'update'|'delete', id, data }]。BATCH_MAX 件ごとに writeBatch
     batch: (ops) => Promise.all(chunks(ops).map((part) => {
       const b = writeBatch(db);
@@ -315,7 +327,8 @@ async function firestoreBackend(uid) {
       return b.commit();
     })),
     setProject: (name, data) => setDoc(doc(pcol, projectDocId(name)), data, { merge: true }),
-    setAreas: (list) => setDoc(areasRef, { list, updatedAt: Date.now() }),
+    // 一覧を丸ごと上書きしない（2台で同時に足しても両方残る。オフラインでも書ける）
+    addAreas: (items) => setDoc(areasRef, { list: arrayUnion(...items), updatedAt: Date.now() }, { merge: true }),
     stop: () => { unsub(); unsubP(); unsubA(); },
   };
 }
@@ -352,10 +365,9 @@ function demoBackend() {
   return {
     add: async (x) => { const id = `demo${++n}`; apply({ type: 'set', id, data: x }); emit(); return id; },
     update: async (id, p) => { apply({ type: 'update', id, data: p }); emit(); },
-    newId: () => `demo${++n}`,
     batch: async (ops) => { for (const o of ops) apply(o); emit(); },
     setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases, updatedAt: data.updatedAt }); emit(); },
-    setAreas: async (list) => { areaList = list; emit(); },
+    addAreas: async () => { emit(); },
     stop: () => {},
   };
 }
