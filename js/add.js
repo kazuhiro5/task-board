@@ -75,6 +75,9 @@ export function mountAdd(container, getContext) {
     for (const k of KEYS) {
       if (touched.has(k)) continue;
       sel[k] = ctx[k] || null;
+      // 手で追加する時、やる日は選ばなければ今日（締切は別に付けられるため。2026-10-29 オーナー）。
+      // 日付なしタブなど、画面が noDate を渡した時だけ空のまま
+      if (k === 'doDate' && !sel.doDate && !ctx.noDate) sel.doDate = todayKey();
       if (k === 'project') newProject = false;
       if (k in customDate) customDate[k] = false;
     }
@@ -188,7 +191,7 @@ export function mountAdd(container, getContext) {
   function renderTags() {
     const t = todayKey();
     tags.replaceChildren(
-      dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]]),
+      dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]], true),
       simpleRow('area', '用途', areaNames()),
     );
     const ctxProject = readContext().project;

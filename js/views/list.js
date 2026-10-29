@@ -134,7 +134,8 @@ export function renderList(container, tasks, opts) {
   const pickedVal = picked ? picked.slice(tab.length + 1) : null;
   // 日付なしタブの見出しは用途（「ここに追加」で、その用途の日付なしのタスクになる）
   const ctxKey = tab === 'nodate' ? 'area' : tab;
-  opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
+  // 日付なしタブで追加したものは、やる日を今日にしない（noDate）
+  opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}), ...(tab === 'nodate' ? { noDate: true } : {}) });
 
   const filterBar = areaFilter
     ? h('div', { class: 'tb-filterbar' },
