@@ -10,6 +10,8 @@
 // （古いタスクに size が残っていることがあるが、画面には出さない。書き換えもしない）
 // deletedAt：ゴミ箱に入れた時刻（ミリ秒）。あるタスクは getTasks／subscribe に出さない（getTrash だけに出す）。
 //   起動時に、30日より前に消したものを完全に消す（1回の起動で PURGE_MAX 件まで）。
+// repeat：繰り返し（js/repeat.js）。完了にした時、次の回のタスクを新しく作り、その id を completedNextId に覚える。
+//   完了を戻した時、次の回がまだ未着手ならゴミ箱へ入れる。
 //
 // プロジェクトの一覧（決定/0007）：users/{uid}/projects/{文書の番号} に { name, phases, updatedAt }。
 // 文書の番号は encodeURIComponent(名前)（「大学/ゼミ」の / がパスの区切りにならないように。「.」も %2E に）。
@@ -17,6 +19,7 @@
 //
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
 import { todayKey, addDays } from './dates.js';
+import { normRepeat, nextDate, daysBetween } from './repeat.js';
 
 const isDemo = new URLSearchParams(location.search).has('demo');
 
@@ -107,6 +110,7 @@ function normalize(data) {
     phase: project ? toPhase(data.phase) : null,
     priority: data.priority || null,
     memo: data.memo || '',
+    repeat: normRepeat(data.repeat),
     order: typeof data.order === 'number' && Number.isFinite(data.order) ? data.order : now,
     createdAt: now,
     updatedAt: now,
@@ -127,7 +131,49 @@ export async function updateTask(id, patch) {
   if ('phase' in patch) p.phase = toPhase(patch.phase);
   if ('order' in patch && !(typeof patch.order === 'number' && Number.isFinite(patch.order))) delete p.order;
   if ('project' in patch && !p.project) p.phase = null; // プロジェクトを外したらフェーズも外す
-  return backend.update(id, p);
+  if ('repeat' in patch) p.repeat = normRepeat(patch.repeat);
+
+  // 繰り返し：完了にした時に次の回を作る／完了を戻した時に未着手の次の回をゴミ箱へ
+  const cur = allTasks.find((x) => x.id === id);
+  const ops = [];
+  if (cur && 'status' in patch) {
+    const wasDone = cur.status === 'done';
+    const nowDone = patch.status === 'done';
+    const rep = 'repeat' in patch ? p.repeat : normRepeat(cur.repeat);
+    if (!wasDone && nowDone && rep) {
+      const nid = backend.newId();
+      ops.push({ type: 'set', id: nid, data: nextOf({ ...cur, ...p }, rep) });
+      p.completedNextId = nid;
+    } else if (wasDone && !nowDone && cur.completedNextId) {
+      const nx = allTasks.find((x) => x.id === cur.completedNextId);
+      if (nx && !nx.deletedAt && (nx.status || 'todo') === 'todo') {
+        ops.push({ type: 'update', id: nx.id, data: { deletedAt: Date.now(), updatedAt: Date.now() } });
+      }
+      p.completedNextId = null;
+    }
+  }
+  if (!ops.length) return backend.update(id, p);
+  ops.push({ type: 'update', id, data: p });
+  return backend.batch(ops);
+}
+
+// 次の回：同じ名前・分類・内容・繰り返しで、やる日を次の日に。締切があれば同じ日数だけずらす。
+// やる日が無ければ今日を基準にする
+function nextOf(t, rep) {
+  const base = t.doDate || todayKey();
+  const doDate = nextDate(rep, base);
+  const shift = daysBetween(base, doDate);
+  return normalize({
+    title: t.title,
+    area: t.area,
+    project: t.project,
+    phase: t.phase,
+    priority: t.priority,
+    memo: t.memo,
+    repeat: rep,
+    doDate,
+    dueDate: t.dueDate ? addDays(t.dueDate, shift) : null,
+  });
 }
 
 // 削除＝ゴミ箱へ（文書は消さず deletedAt を付ける）

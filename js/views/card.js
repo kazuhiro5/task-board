@@ -3,6 +3,7 @@ import { updateTask } from '../store.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
 import { PRIORITIES, STATUS_LABEL } from '../constants.js';
+import { repeatLabel } from '../repeat.js';
 
 // 要素を作る小さな道具。h('div', { class: 'x', onclick: fn }, '文字', 子要素…)
 export function h(tag, attrs = {}, ...children) {
@@ -136,6 +137,8 @@ export function taskCard(task, opts = {}) {
     meta.push(h('span', { class: 'tb-tag tb-due' + (over ? ' is-over' : '') }, `〆${md(task.dueDate)}`));
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
+  const rep = repeatLabel(task.repeat);
+  if (rep) meta.push(h('span', { class: 'tb-tag tb-rep', title: `繰り返し：${rep}` }, `↻${rep}`));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
   if (opts.showPhase && task.phase && !hide.has('phase')) {
     meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));

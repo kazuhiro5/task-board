@@ -413,3 +413,4 @@
 .tb-od-move { font-size: 13px; }
 .tb-od-move.is-armed { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
 .tb-od-hint { margin: 0; font-size: 13px; color: var(--text); font-weight: 600; }
+.tb-rep { color: var(--accent); }

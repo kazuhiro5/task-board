@@ -25,6 +25,7 @@ const APP_FILES = [
   './js/dates.js',
   './js/constants.js',
   './js/toast.js',
+  './js/repeat.js',
   './js/views/today.js',
   './js/views/week.js',
   './js/views/list.js',

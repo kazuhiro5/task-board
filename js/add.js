@@ -9,6 +9,7 @@
 import { addTask, projectNames, getPhases } from './store.js';
 import { AREAS, PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
+import { repeatEditor } from './repeat.js';
 
 const KEYS = ['doDate', 'dueDate', 'area', 'project', 'phase', 'priority'];
 const MAX_PROJECTS = 6;
@@ -39,6 +40,7 @@ export function mountAdd(container, getContext) {
   // 選択中のタグ。null＝未選択
   let sel = {};
   let memo = '';
+  let repeat = null; // 繰り返し（js/repeat.js の形）
   let touched = new Set(); // 前回の初期化の後に、手で触った行（KEYS のどれか）
   let lastAdd = 0; // 連打で空の追加になった時、エラーを出さないため
   let open = false; // 「もっと」を開いているか
@@ -83,6 +85,7 @@ export function mountAdd(container, getContext) {
   function resetFromContext() {
     touched = new Set();
     memo = '';
+    repeat = null;
     syncContext();
     renderTags();
   }
@@ -192,7 +195,7 @@ export function mountAdd(container, getContext) {
     if (ctxProject) tags.append(phaseRow(ctxProject));
 
     // 閉じていても、選択中のものがあれば分かるように件数を出す
-    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0);
+    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0) + (repeat ? 1 : 0);
     moreBtn.textContent = open ? 'たたむ ▴' : `もっと ▾${hidden ? `（${hidden}）` : ''}`;
     moreBtn.setAttribute('aria-expanded', String(open));
     more.hidden = !open;
@@ -207,6 +210,10 @@ export function mountAdd(container, getContext) {
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
       projectRow(),
       simpleRow('priority', '優先度', PRIORITIES),
+      el('div', { class: 'tag-row' }, [
+        el('span', { class: 'tag-label', text: '繰り返し' }),
+        repeatEditor({ value: repeat, base: () => sel.doDate, onChange: (r) => { repeat = r; } }),
+      ]),
       row('内容', [memoBox]),
     );
   }
@@ -242,6 +249,7 @@ export function mountAdd(container, getContext) {
     // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
     if (!ctx.project || !data.project) delete data.phase;
     if (memo.trim()) data.memo = memo.trim();
+    if (repeat) data.repeat = repeat;
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;
 
     // 待たずに空にする（連打しても同じ名前が2回入らない・オフラインでも続けて入れられる）

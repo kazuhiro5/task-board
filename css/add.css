@@ -138,3 +138,9 @@
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+/* ---- 繰り返し（js/repeat.js） ---- */
+.rep-box { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.rep-days .chip { min-width: var(--tap); padding: 0 8px; }
+.rep-month { display: flex; align-items: center; gap: 6px; font-size: 14px; flex-wrap: wrap; }
+.rep-day { width: 5em; }

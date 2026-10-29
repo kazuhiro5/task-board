@@ -12,10 +12,11 @@
 // 閉じたら、開いた元のカードにフォーカスを戻す。
 import { updateTask, deleteTask, restoreTask, projectNames, getPhases } from './store.js';
 import { showToast } from './toast.js';
+import { repeatEditor, normRepeat } from './repeat.js';
 import { AREAS, PRIORITIES, STATUSES } from './constants.js';
 
 // size（大中小）はなくした。古いタスクに値が残っていても、ここでは出さず書き換えもしない
-const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'phase', 'priority', 'memo'];
+const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'phase', 'priority', 'repeat', 'memo'];
 const WIDE = '(min-width: 840px)';
 
 let dialog = null;
@@ -185,6 +186,7 @@ export function openEdit(task) {
   const orig = {};
   for (const k of FIELDS) orig[k] = task[k] ?? (k === 'memo' ? '' : null);
   if (!orig.status) orig.status = 'todo';
+  orig.repeat = normRepeat(orig.repeat);
   const v = { ...orig };
   let armed = false; // 削除を1回押したか
 
@@ -292,7 +294,10 @@ export function openEdit(task) {
     v.title = (v.title || '').trim();
     if (!v.title) { error.textContent = 'タスク名を入れてください'; titleInput.focus(); return; }
     const patch = {};
-    for (const k of FIELDS) if ((v[k] ?? null) !== (orig[k] ?? null)) patch[k] = v[k];
+    for (const k of FIELDS) {
+      const same = k === 'repeat' ? JSON.stringify(v[k] ?? null) === JSON.stringify(orig[k] ?? null) : (v[k] ?? null) === (orig[k] ?? null);
+      if (!same) patch[k] = v[k];
+    }
     closeEdit();
     if (!Object.keys(patch).length) return;
     updateTask(task.id, patch).catch((err) => {
@@ -321,6 +326,7 @@ export function openEdit(task) {
       field('プロジェクト', [projInput, projChips]),
       phaseField,
       field('優先度', [chipControl('priority', PRIORITIES)]),
+      field('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
       field('内容', [memoBox]),
     ]),
     el('div', { class: 'edit-foot' }, [
