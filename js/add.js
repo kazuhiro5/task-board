@@ -218,10 +218,22 @@ export function mountAdd(container, getContext) {
     );
   }
 
-  // 開閉（スマホだけ効く。PCは CSS で常に全部見せる）：
-  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後に畳む（1行目だけ残る）
+  // 開閉（スマホ・PC共通。PCは上のまま下に開く）：
+  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc で畳む（1行目だけ残る）
+  let quiet = false; // true の間はフォーカスしても開かない（Esc で戻した時）
   function setOpen(v) { container.classList.toggle('is-open', v); }
   title.addEventListener('click', () => setOpen(true));
+  // タグを押すと描き直されてフォーカスが body に落ちることがあるので、document で拾う
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !container.classList.contains('is-open')) return;
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && !container.contains(ae)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+    // タグから Esc した時は入力欄へ戻す（戻した時のフォーカスでは開かない）
+    if (document.activeElement !== title) { quiet = true; title.focus(); quiet = false; }
+  });
   document.addEventListener('pointerdown', (e) => {
     if (!container.contains(e.target)) setOpen(false);
   });
@@ -230,7 +242,7 @@ export function mountAdd(container, getContext) {
     // 画面が変わると初期値も変わる。手で選んだ行は消さない
     syncContext();
     renderTags();
-    setOpen(true);
+    if (!quiet) setOpen(true);
   });
   title.addEventListener('input', () => { error.textContent = ''; });
 
