@@ -397,3 +397,19 @@
 .tb-trash-btns { flex: none; display: flex; gap: 6px; margin-left: auto; }
 .tb-danger { color: var(--danger); }
 .tb-danger.is-armed { background: var(--danger); border-color: var(--danger); color: var(--on-accent); font-weight: 700; }
+
+/* ---- 今日：期限切れ（畳んだ1行。赤は件数だけ） ---- */
+.tb-od-head { margin: 0 0 6px; font-size: 13px; }
+.tb-od-btn {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--tap);
+  padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  font: inherit; font-weight: 600; color: var(--muted); text-align: left; cursor: pointer;
+}
+.tb-od-btn:hover { border-color: var(--muted); }
+.tb-od-n { color: var(--danger); font-weight: 700; }
+.tb-od-chev { margin-left: auto; font-size: 12px; }
+.tb-od-body { display: grid; gap: 8px; }
+.tb-od-bulk { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-od-move { font-size: 13px; }
+.tb-od-move.is-armed { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 700; }
+.tb-od-hint { margin: 0; font-size: 13px; color: var(--text); font-weight: 600; }
