@@ -5,8 +5,9 @@
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
 // opts.params.area があれば、その用途に絞って出す（「就活で絞り込み中 ×」で解除）。
 // 見出しを押すと「ここに追加」（入力欄の初期値をその用途・状態にする）。
-import { AREAS, STATUSES } from '../constants.js';
-import { h, isOpen, compareTasks, taskCard, sectionHead, areaDot } from './card.js';
+import { STATUSES } from '../constants.js';
+import { areaNames, addArea } from '../store.js';
+import { h, isOpen, compareTasks, taskCard, sectionHead, areaDot, inlineAdder } from './card.js';
 import { addMoves, doneItems } from './modes.js';
 
 const TABS = [
@@ -62,7 +63,10 @@ function group(key, v, title, items, cardOpts, extra = {}) {
 // 用途タブ
 function areaTab(scoped, opts) {
   const list = showDone ? scoped : scoped.filter(isOpen);
-  const order = [...AREAS, NONE].filter((v) => !areaFilter || list.some((x) => (x.area || NONE) === v));
+  const names = areaNames();
+  // 一覧に無い用途（消した用途の古いタスクなど）も、未設定の前に出す
+  const unknown = [...new Set(list.map((x) => x.area).filter((a) => a && !names.includes(a)))];
+  const order = [...names, ...unknown, NONE].filter((v) => !areaFilter || list.some((x) => (x.area || NONE) === v));
   const buckets = new Map(order.map((v) => [v, []]));
   for (const x of list) buckets.get(x.area || NONE)?.push(x);
   for (const items of buckets.values()) items.sort(compareTasks);
@@ -73,7 +77,11 @@ function areaTab(scoped, opts) {
       class: 'tb-btn tb-toggle' + (showDone ? ' is-active' : ''),
       'aria-pressed': String(showDone),
       onclick: () => { showDone = !showDone; opts.rerender(); },
-    }, showDone ? '✓ 完了を表示' : '完了を表示'));
+    }, showDone ? '✓ 完了を表示' : '完了を表示'),
+    // スマホ幅（左の一覧が無い）だけ出す
+    h('div', { class: 'tb-narrow-only tb-adder-wrap' }, inlineAdder('list-area', {
+      label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: addArea, rerender: opts.rerender,
+    })));
   const sections = [...buckets.entries()].map(([v, items]) =>
     group('area', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
   return [bar, sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];

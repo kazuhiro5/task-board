@@ -6,8 +6,8 @@
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
 // フェーズの行は、プロジェクトの中にいる時（getContext() に project がある時）だけ出す。初期値は getContext().phase。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
-import { addTask, projectNames, getPhases } from './store.js';
-import { AREAS, PRIORITIES, STATUSES } from './constants.js';
+import { addTask, projectNames, getPhases, areaNames, subscribe } from './store.js';
+import { PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor } from './repeat.js';
 
@@ -189,7 +189,7 @@ export function mountAdd(container, getContext) {
     const t = todayKey();
     tags.replaceChildren(
       dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]]),
-      simpleRow('area', '用途', AREAS),
+      simpleRow('area', '用途', areaNames()),
     );
     const ctxProject = readContext().project;
     if (ctxProject) tags.append(phaseRow(ctxProject));
@@ -266,6 +266,18 @@ export function mountAdd(container, getContext) {
 
   resetFromContext();
   followKeyboard();
+
+  // 用途・プロジェクトが足されたら描き直す（入力欄の中で打っている時は描き直さない＝打った文字が消えないように）
+  let listSig = '';
+  subscribe(() => {
+    const sig = `${areaNames().join('')}${projectNames().slice(0, MAX_PROJECTS).join('')}`;
+    if (sig === listSig) return;
+    const first = !listSig;
+    listSig = sig;
+    const ae = document.activeElement;
+    if (first || (ae && container.contains(ae) && ae !== title && ae.tagName !== 'BUTTON')) return;
+    renderTags();
+  });
 
   // app.js から呼ぶ：画面を移って文脈（getContext()）が変わった。
   // 手で触っていない行だけ今の文脈に合わせて、タグの表示を描き直す（触った行はそのまま）

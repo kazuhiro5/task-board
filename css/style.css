@@ -7,7 +7,7 @@
    用途の色（js/constants.js の AREAS と対応。CSS変数に日本語を使わないため英字）
      大学 → --cat-univ   AI開発 → --cat-ai   就活 → --cat-job
      バイト → --cat-work  勉強 → --cat-study  家事 → --cat-home
-   JSからは app.js の AREA_VAR（{ 大学: '--cat-univ', … }）を使う。 */
+   JSからは store.js の areaColor(名前) を使う（足した用途は保存した色を inline で）。 */
 :root {
   --bg: #F6F8FA;
   --surface: #FFFFFF;
@@ -226,3 +226,9 @@ button { font: inherit; color: inherit; }
 @media (min-width: 840px) {
   .toast { bottom: 24px; }
 }
+
+/* 左の一覧の「＋ 用途を追加」「＋ プロジェクトを追加」（形は views.css の .tb-adder-*） */
+.side .tb-adder-btn { width: 100%; border-color: transparent; font-size: 13px; }
+.side .tb-adder-btn:hover { border-color: var(--line); background: var(--surface); }
+.side .tb-adder { padding: 2px 0; }
+.side .tb-adder-ok { padding: 0 8px; font-size: 13px; }

@@ -10,10 +10,10 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, restoreTask, projectNames, getPhases } from './store.js';
+import { updateTask, deleteTask, restoreTask, projectNames, getPhases, areaNames } from './store.js';
 import { showToast } from './toast.js';
 import { repeatEditor, normRepeat } from './repeat.js';
-import { AREAS, PRIORITIES, STATUSES } from './constants.js';
+import { PRIORITIES, STATUSES } from './constants.js';
 
 // size（大中小）はなくした。古いタスクに値が残っていても、ここでは出さず書き換えもしない
 const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'phase', 'priority', 'repeat', 'memo'];
@@ -322,7 +322,7 @@ export function openEdit(task) {
       field('状態', [statusBox]),
       field('やる日', [el('div', { class: 'edit-date' }, [doIn, doNone])]),
       field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
-      field('用途', [chipControl('area', AREAS)]),
+      field('用途', [chipControl('area', areaNames())]),
       field('プロジェクト', [projInput, projChips]),
       phaseField,
       field('優先度', [chipControl('priority', PRIORITIES)]),

@@ -15,11 +15,14 @@
 //
 // プロジェクトの一覧（決定/0007）：users/{uid}/projects/{文書の番号} に { name, phases, updatedAt }。
 // 文書の番号は encodeURIComponent(名前)（「大学/ゼミ」の / がパスの区切りにならないように。「.」も %2E に）。
-// 文書が無いプロジェクトはフェーズ5つとして扱う。
+// 文書が無いプロジェクトはフェーズ5つとして扱う。「＋ プロジェクトを追加」でタスクが0件でも文書を作る（その名前も一覧に出す）。
+//
+// 用途の一覧：users/{uid}/meta/areas に { list: [{ name, color }], updatedAt }。文書が無ければ constants.AREAS の6つ。
 //
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
 import { todayKey, addDays } from './dates.js';
 import { normRepeat, nextDate, daysBetween } from './repeat.js';
+import { AREAS, AREA_KEYS, AREA_HEX, SPARE_COLORS } from './constants.js';
 
 const isDemo = new URLSearchParams(location.search).has('demo');
 
@@ -27,7 +30,8 @@ let backend = null;
 let listeners = [];
 let allTasks = []; // ゴミ箱の中も含む全部
 let tasks = []; // ゴミ箱の中を除いたもの（画面に渡す）
-let projects = new Map(); // プロジェクト名 → { phases }
+let projects = new Map(); // プロジェクト名 → { phases, updatedAt }
+let areaList = null; // 用途の一覧（null＝文書なし。決まった6つとして扱う）
 
 export const DEFAULT_PHASES = 5;
 const TRASH_DAYS = 30;
@@ -70,9 +74,49 @@ export async function addPhase(project) {
   const name = project ? String(project).trim() : '';
   if (!name) throw new Error('プロジェクトがありません');
   const phases = getPhases(name) + 1;
-  projects = new Map(projects).set(name, { phases });
+  projects = new Map(projects).set(name, { ...projects.get(name), phases });
   emit();
   return backend.setProject(name, { name, phases, updatedAt: Date.now() });
+}
+
+// 用途の一覧 [{ name, color }]
+export function getAreas() {
+  return areaList || AREAS.map((name) => ({ name, color: AREA_HEX[name] }));
+}
+export function areaNames() {
+  return getAreas().map((a) => a.name);
+}
+// 用途の点の色（CSS の色）。決まった6つは --cat-*（ダークで変わる）、足した用途は保存した色
+export function areaColor(name) {
+  if (AREA_KEYS[name]) return `var(--cat-${AREA_KEYS[name]})`;
+  return getAreas().find((a) => a.name === name)?.color || null;
+}
+
+// 用途を足す（同じ名前は足さない）。色は予備の色のうち、まだ使っていないものから順に。
+// 名前がおかしい時はその場で Error を投げる（画面がすぐ出せるように async にしない）。書き込みの Promise を返す
+export function addArea(raw) {
+  const name = String(raw || '').trim();
+  if (!name) throw new Error('名前を入れてください');
+  if (name.length > 20) throw new Error('20文字までにしてください');
+  const list = getAreas();
+  if (list.some((a) => a.name === name)) throw new Error('同じ名前の用途があります');
+  const used = new Set(list.map((a) => a.color));
+  const extra = list.length - AREAS.length;
+  const color = SPARE_COLORS.find((c) => !used.has(c)) || SPARE_COLORS[Math.max(0, extra) % SPARE_COLORS.length];
+  areaList = [...list, { name, color }];
+  emit();
+  return backend.setAreas(areaList);
+}
+
+// プロジェクトを作る（タスク0件でも一覧に出す）。同じ名前は作らない。addArea と同じくその場で Error を投げる
+export function addProject(raw) {
+  const name = String(raw || '').trim();
+  if (!name) throw new Error('名前を入れてください');
+  if (projectNames().includes(name)) throw new Error('同じ名前のプロジェクトがあります');
+  const now = Date.now();
+  projects = new Map(projects).set(name, { phases: DEFAULT_PHASES, updatedAt: now });
+  emit();
+  return backend.setProject(name, { name, phases: DEFAULT_PHASES, updatedAt: now });
 }
 
 // Firestore の文書の番号（名前の / や . をそのまま使えないため）
@@ -88,13 +132,16 @@ function toPhase(v) {
   return n >= 1 ? n : null;
 }
 
-// 一覧に出すプロジェクト名（使われている順・新しい順）
+// 一覧に出すプロジェクト名（触った順・新しい順）。タスクの project に加えて、projects の文書の名前も（タスク0件でも出す）
 export function projectNames() {
-  const seen = new Map();
-  for (const t of [...tasks].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))) {
-    if (t.project && !seen.has(t.project)) seen.set(t.project, true);
+  const last = new Map(); // 名前 → 最後に触った時刻
+  for (const t of tasks) {
+    if (t.project) last.set(t.project, Math.max(last.get(t.project) || 0, t.updatedAt || 0));
   }
-  return [...seen.keys()];
+  for (const [name, p] of projects) {
+    if (name) last.set(name, Math.max(last.get(name) || 0, p.updatedAt || 0));
+  }
+  return [...last.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
 }
 
 function normalize(data) {
@@ -238,9 +285,18 @@ async function firestoreBackend(uid) {
       const x = d.data();
       let name = x.name;
       if (!name) { try { name = decodeURIComponent(d.id); } catch { name = d.id; } }
-      m.set(name, { phases: x.phases });
+      m.set(name, { phases: x.phases, updatedAt: x.updatedAt || 0 });
     }
     projects = m;
+    emit();
+  });
+  // 用途の一覧（文書が無ければ決まった6つ）
+  const areasRef = doc(db, 'users', uid, 'meta', 'areas');
+  const unsubA = onSnapshot(areasRef, (snap) => {
+    const list = snap.exists() ? snap.data().list : null;
+    areaList = Array.isArray(list) && list.length
+      ? list.filter((a) => a && typeof a.name === 'string' && a.name).map((a) => ({ name: a.name, color: a.color || null }))
+      : null;
     emit();
   });
   return {
@@ -259,7 +315,8 @@ async function firestoreBackend(uid) {
       return b.commit();
     })),
     setProject: (name, data) => setDoc(doc(pcol, projectDocId(name)), data, { merge: true }),
-    stop: () => { unsub(); unsubP(); },
+    setAreas: (list) => setDoc(areasRef, { list, updatedAt: Date.now() }),
+    stop: () => { unsub(); unsubP(); unsubA(); },
   };
 }
 
@@ -286,6 +343,7 @@ function demoBackend() {
     mk({ title: '31日前に消したタスク', area: '家事', deletedAt: Date.now() - 31 * day }),
   ]);
   projects = new Map();
+  areaList = null;
   const apply = (o) => {
     if (o.type === 'set') { setAll([...allTasks.filter((x) => x.id !== o.id), { ...o.data, id: o.id }]); return; }
     if (o.type === 'delete') { setAll(allTasks.filter((x) => x.id !== o.id)); return; }
@@ -296,7 +354,8 @@ function demoBackend() {
     update: async (id, p) => { apply({ type: 'update', id, data: p }); emit(); },
     newId: () => `demo${++n}`,
     batch: async (ops) => { for (const o of ops) apply(o); emit(); },
-    setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases }); emit(); },
+    setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases, updatedAt: data.updatedAt }); emit(); },
+    setAreas: async (list) => { areaList = list; emit(); },
     stop: () => {},
   };
 }
@@ -317,5 +376,6 @@ export function stop() {
   backend = null;
   setAll([]);
   projects = new Map();
+  areaList = null;
   emit();
 }
