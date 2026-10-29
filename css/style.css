@@ -206,3 +206,23 @@ button { font: inherit; color: inherit; }
   .main { padding: 0 24px 40px; }
   .top { padding: 10px 0; }
 }
+
+/* ---- 画面の下に数秒出すお知らせ（js/toast.js） ----
+   スマホは下の入力欄とタブの上、PCは右下 */
+.toast {
+  position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + var(--addbar-h) + 16px + env(safe-area-inset-bottom));
+  width: max-content; max-width: calc(100vw - 32px);
+  display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 14px;
+  background: var(--text); color: var(--bg); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / .25); font-size: 14px;
+}
+.toast-text { min-width: 0; overflow-wrap: anywhere; }
+.toast-btn {
+  flex: none; min-height: var(--tap); padding: 0 12px; border: 0; border-radius: var(--radius-s);
+  background: none; color: inherit; font-weight: 700; text-decoration: underline; cursor: pointer;
+}
+.toast-btn:hover { background: color-mix(in srgb, var(--bg) 18%, transparent); }
+@media (min-width: 840px) {
+  .toast { bottom: 24px; }
+}

@@ -13,6 +13,7 @@ import { renderToday } from './views/today.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
+import { renderTrash } from './views/trash.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -30,6 +31,8 @@ const VIEWS = {
   projects: { label: 'プロジェクト', render: renderProjects },
   list: { label: '一覧', render: renderList },
 };
+// タブ・左の一覧に出さない画面（⋯メニューから開く）。開いた画面としては保存しない
+const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash } };
 
 // 用途 → 色の変数（css/style.css）。CSS変数に日本語を使わないため英字にしている。
 // 使い方：style="--cat: var(--cat-job)"、または class="cat-dot cat-job"（--cat-job の「--」を除いた名前）
@@ -77,7 +80,7 @@ let addBox = null; // mountAdd の戻り値（{ contextChanged }）
 
 // 画面を切り替える（タブ・左の一覧・画面の中から呼ぶ）
 function navigate(view, params = {}) {
-  if (!VIEWS[view]) return;
+  if (!ALL_VIEWS[view]) return;
   const changed = view !== state.view || JSON.stringify(params) !== JSON.stringify(state.params);
   state.view = view;
   state.params = { ...params };
@@ -85,7 +88,7 @@ function navigate(view, params = {}) {
   state.ctx = {};
   if (params.area) state.ctx.area = params.area;
   if (params.project) state.ctx.project = params.project;
-  savePref('view', view);
+  if (VIEWS[view]) savePref('view', view);
   render();
   // 描画の後（画面が setContext した後）に、入力欄のタグ表示を今の文脈に合わせる
   if (addBox) addBox.contextChanged();
@@ -179,8 +182,8 @@ function render() {
   renderTabbar();
   renderSide();
   const p = state.params;
-  $('#topTitle').textContent = p.project || p.area || VIEWS[state.view].label;
-  VIEWS[state.view].render($('#view'), store.getTasks(), {
+  $('#topTitle').textContent = p.project || p.area || ALL_VIEWS[state.view].label;
+  ALL_VIEWS[state.view].render($('#view'), store.getTasks(), {
     group: state.group,
     setGroup,
     setContext,
@@ -226,6 +229,13 @@ function renderThemeOpts() {
 document.addEventListener('pointerdown', (e) => {
   const d = document.querySelector('details.user[open]');
   if (d && !d.contains(e.target)) d.open = false;
+});
+
+// ⋯メニューの「ゴミ箱」
+$('#trashBtn').addEventListener('click', () => {
+  const d = document.querySelector('details.user');
+  if (d) d.open = false;
+  navigate('trash', {});
 });
 
 function showApp(signedIn) {

@@ -388,3 +388,12 @@
 .tb-dragging [data-drop].is-drop-ok.is-drop-over { background: var(--accent-weak); outline: 2px solid var(--accent); }
 .tb-dragging [data-drop].is-drop-no { opacity: .45; }
 .tb-drop-err { margin: 0 0 8px; padding-left: 0; }
+
+/* ---- ゴミ箱 ---- */
+.tb-trash { max-width: 760px; }
+.tb-trash-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 0 0 12px; }
+.tb-trash-row { flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; }
+.tb-trash-body { flex: 1 1 200px; min-width: 0; display: grid; gap: 2px; }
+.tb-trash-btns { flex: none; display: flex; gap: 6px; margin-left: auto; }
+.tb-danger { color: var(--danger); }
+.tb-danger.is-armed { background: var(--danger); border-color: var(--danger); color: var(--on-accent); font-weight: 700; }

@@ -8,6 +8,8 @@
 // order：同じ日・区分の中の手動の順番（数。小さいほど上）。無い古いタスクは createdAt を使って並べる（views/sort.js）。
 //   引きずって並べ替えた時は、前後の order の中間を1件だけ書く。
 // （古いタスクに size が残っていることがあるが、画面には出さない。書き換えもしない）
+// deletedAt：ゴミ箱に入れた時刻（ミリ秒）。あるタスクは getTasks／subscribe に出さない（getTrash だけに出す）。
+//   起動時に、30日より前に消したものを完全に消す（1回の起動で PURGE_MAX 件まで）。
 //
 // プロジェクトの一覧（決定/0007）：users/{uid}/projects/{文書の番号} に { name, phases, updatedAt }。
 // 文書の番号は encodeURIComponent(名前)（「大学/ゼミ」の / がパスの区切りにならないように。「.」も %2E に）。
@@ -20,10 +22,19 @@ const isDemo = new URLSearchParams(location.search).has('demo');
 
 let backend = null;
 let listeners = [];
-let tasks = [];
+let allTasks = []; // ゴミ箱の中も含む全部
+let tasks = []; // ゴミ箱の中を除いたもの（画面に渡す）
 let projects = new Map(); // プロジェクト名 → { phases }
 
 export const DEFAULT_PHASES = 5;
+const TRASH_DAYS = 30;
+const PURGE_MAX = 200; // 起動時に完全に消す最大数（書き込みが一度に多くならないように）
+const BATCH_MAX = 500; // Firestore の writeBatch 1回の上限
+
+function setAll(list) {
+  allTasks = list;
+  tasks = list.filter((x) => !x.deletedAt);
+}
 
 function emit() {
   for (const cb of listeners) cb(tasks);
@@ -38,6 +49,11 @@ export function subscribe(cb) {
 
 export function getTasks() {
   return tasks;
+}
+
+// ゴミ箱の中（新しく消した順）
+export function getTrash() {
+  return allTasks.filter((x) => x.deletedAt).sort((a, b) => b.deletedAt - a.deletedAt);
 }
 
 // プロジェクトのフェーズの数（文書が無ければ5）
@@ -114,20 +130,59 @@ export async function updateTask(id, patch) {
   return backend.update(id, p);
 }
 
+// 削除＝ゴミ箱へ（文書は消さず deletedAt を付ける）
 export async function deleteTask(id) {
-  return backend.remove(id);
+  return backend.update(id, { deletedAt: Date.now(), updatedAt: Date.now() });
+}
+
+// ゴミ箱から戻す
+export async function restoreTask(id) {
+  return backend.update(id, { deletedAt: null, updatedAt: Date.now() });
+}
+
+// 完全に消す（ゴミ箱の「完全に消す」と、起動時の30日の掃除）
+export async function purgeTask(id) {
+  return backend.batch([{ type: 'delete', id }]);
+}
+
+// 何件もまとめて書き換える。entries = [{ id, patch }]。Firestore は writeBatch で BATCH_MAX 件ごとに分ける。
+// 端末内にはすぐ入る（オフラインだと Promise は終わらないので、画面は待たない）
+export async function updateMany(entries) {
+  const now = Date.now();
+  return backend.batch(entries.map(({ id, patch }) => ({ type: 'update', id, data: { ...patch, updatedAt: now } })));
+}
+
+// 30日より前にゴミ箱に入れたものを完全に消す（起動時に1回）
+let purged = false;
+function purgeOld() {
+  if (purged || !backend) return;
+  purged = true;
+  const limit = Date.now() - TRASH_DAYS * 24 * 60 * 60 * 1000;
+  const old = allTasks.filter((x) => x.deletedAt && x.deletedAt < limit).slice(0, PURGE_MAX);
+  if (!old.length) return;
+  backend.batch(old.map((x) => ({ type: 'delete', id: x.id }))).catch((e) => {
+    console.warn('[task-board] ゴミ箱の掃除に失敗', e);
+  });
+}
+
+// ops を BATCH_MAX 件ずつに分ける
+function chunks(ops) {
+  const out = [];
+  for (let i = 0; i < ops.length; i += BATCH_MAX) out.push(ops.slice(i, i + BATCH_MAX));
+  return out;
 }
 
 // ---- 裏側：Firestore ----
 async function firestoreBackend(uid) {
   const { db } = await import('./firebase.js');
   const {
-    collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot,
+    collection, doc, addDoc, updateDoc, setDoc, onSnapshot, writeBatch,
   } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
   const col = collection(db, 'users', uid, 'tasks');
   const unsub = onSnapshot(col, { includeMetadataChanges: false }, (snap) => {
-    tasks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    setAll(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
     emit();
+    purgeOld();
   });
   // プロジェクトの一覧（フェーズの数）。変わったらタスクと同じく画面を描き直す
   const pcol = collection(db, 'users', uid, 'projects');
@@ -145,7 +200,18 @@ async function firestoreBackend(uid) {
   return {
     add: (t) => addDoc(col, t).then((r) => r.id),
     update: (id, p) => updateDoc(doc(col, id), p),
-    remove: (id) => deleteDoc(doc(col, id)),
+    newId: () => doc(col).id,
+    // ops = [{ type: 'set'|'update'|'delete', id, data }]。BATCH_MAX 件ごとに writeBatch
+    batch: (ops) => Promise.all(chunks(ops).map((part) => {
+      const b = writeBatch(db);
+      for (const o of part) {
+        const ref = doc(col, o.id);
+        if (o.type === 'set') b.set(ref, o.data);
+        else if (o.type === 'update') b.update(ref, o.data);
+        else if (o.type === 'delete') b.delete(ref);
+      }
+      return b.commit();
+    })),
     setProject: (name, data) => setDoc(doc(pcol, projectDocId(name)), data, { merge: true }),
     stop: () => { unsub(); unsubP(); },
   };
@@ -156,7 +222,8 @@ function demoBackend() {
   const t = todayKey();
   let n = 0;
   const mk = (o) => ({ ...normalize(o), ...o, id: `demo${++n}` });
-  tasks = [
+  const day = 24 * 60 * 60 * 1000;
+  setAll([
     mk({ title: '経営戦略のレポートを書く', area: '大学', doDate: t, dueDate: addDays(t, 2), size: '中', priority: '高' }),
     mk({ title: 'ES提出（〇〇社）', area: '就活', project: '〇〇社選考', phase: 1, dueDate: addDays(t, -1), priority: '高' }),
     mk({ title: '企業研究をまとめる', area: '就活', project: '〇〇社選考', phase: 1, status: 'done' }),
@@ -168,13 +235,21 @@ function demoBackend() {
     mk({ title: '思いついたこと（未整理）' }),
     mk({ title: '先生の返信待ち', area: '大学', status: 'waiting' }),
     mk({ title: '終わったタスク', area: '大学', doDate: t, status: 'done' }),
-  ];
+    // ゴミ箱：3日前に消したもの（残る）と、31日前に消したもの（起動時に完全に消える）
+    mk({ title: '3日前に消したタスク', area: '家事', deletedAt: Date.now() - 3 * day }),
+    mk({ title: '31日前に消したタスク', area: '家事', deletedAt: Date.now() - 31 * day }),
+  ]);
   projects = new Map();
-  const find = (id) => tasks.findIndex((x) => x.id === id);
+  const apply = (o) => {
+    if (o.type === 'set') { setAll([...allTasks.filter((x) => x.id !== o.id), { ...o.data, id: o.id }]); return; }
+    if (o.type === 'delete') { setAll(allTasks.filter((x) => x.id !== o.id)); return; }
+    setAll(allTasks.map((x) => (x.id === o.id ? { ...x, ...o.data } : x)));
+  };
   return {
-    add: async (x) => { const id = `demo${++n}`; tasks = [...tasks, { ...x, id }]; emit(); return id; },
-    update: async (id, p) => { const i = find(id); if (i >= 0) { tasks = tasks.map((x, j) => (j === i ? { ...x, ...p } : x)); emit(); } },
-    remove: async (id) => { tasks = tasks.filter((x) => x.id !== id); emit(); },
+    add: async (x) => { const id = `demo${++n}`; apply({ type: 'set', id, data: x }); emit(); return id; },
+    update: async (id, p) => { apply({ type: 'update', id, data: p }); emit(); },
+    newId: () => `demo${++n}`,
+    batch: async (ops) => { for (const o of ops) apply(o); emit(); },
     setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases }); emit(); },
     stop: () => {},
   };
@@ -185,14 +260,16 @@ export const demo = isDemo;
 // ログインした時（または demo の時）に app.js から呼ぶ
 export async function start(uid) {
   if (backend) backend.stop();
+  purged = false;
   backend = isDemo ? demoBackend() : await firestoreBackend(uid);
   emit();
+  if (isDemo) purgeOld();
 }
 
 export function stop() {
   if (backend) backend.stop();
   backend = null;
-  tasks = [];
+  setAll([]);
   projects = new Map();
   emit();
 }
