@@ -1,8 +1,9 @@
 // 画面「一覧」。担当：画面役。
 // renderList(container, tasks, opts)：opts = { group, setGroup, setContext, rerender, params, navigate }
-// 上のChrome風のタブで「用途」「進捗」を切り替える（選んだタブは localStorage の tb.listTab）。
+// 上のChrome風のタブで「用途」「進捗」「日付なし」を切り替える（選んだタブは localStorage の tb.listTab）。
 //   用途：用途ごとのグループ（大学…勉強→未設定）。「完了を表示」で完了も出す
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
+//   日付なし：やる日も締切も無い未完了（用途・プロジェクトが付いていても出す）。用途ごと（未設定は最後）
 // opts.params.area があれば、その用途に絞って出す（「就活で絞り込み中 ×」で解除）。
 // 見出しを押すと「ここに追加」（入力欄の初期値をその用途・状態にする）。
 import { STATUSES } from '../constants.js';
@@ -13,6 +14,7 @@ import { addMoves, doneItems } from './modes.js';
 const TABS = [
   { value: 'area', label: '用途' },
   { value: 'status', label: '進捗' },
+  { value: 'nodate', label: '日付なし' },
 ];
 const NONE = '\u0000none'; // 未設定のグループ
 
@@ -60,9 +62,8 @@ function group(key, v, title, items, cardOpts, extra = {}) {
       extra.more ? h('p', { class: 'tb-empty' }, `ほか${extra.more}件`) : null));
 }
 
-// 用途タブ
-function areaTab(scoped, opts) {
-  const list = showDone ? scoped : scoped.filter(isOpen);
+// 用途ごとに分ける（areaNames の順 → 一覧に無い用途 → 未設定）
+function byArea(list) {
   const names = areaNames();
   // 一覧に無い用途（消した用途の古いタスクなど）も、未設定の前に出す
   const unknown = [...new Set(list.map((x) => x.area).filter((a) => a && !names.includes(a)))];
@@ -70,6 +71,13 @@ function areaTab(scoped, opts) {
   const buckets = new Map(order.map((v) => [v, []]));
   for (const x of list) buckets.get(x.area || NONE)?.push(x);
   for (const items of buckets.values()) items.sort(compareTasks);
+  return buckets;
+}
+
+// 用途タブ
+function areaTab(scoped, opts) {
+  const list = showDone ? scoped : scoped.filter(isOpen);
+  const buckets = byArea(list);
 
   const bar = h('div', { class: 'tb-listbar' },
     h('button', {
@@ -85,6 +93,17 @@ function areaTab(scoped, opts) {
   const sections = [...buckets.entries()].map(([v, items]) =>
     group('area', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
   return [bar, sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
+}
+
+// 日付なしタブ：やる日も締切も無い未完了。中身の無い用途は出さない
+function nodateTab(scoped, opts) {
+  const list = scoped.filter((x) => isOpen(x) && !x.doDate && !x.dueDate);
+  const sections = [...byArea(list).entries()]
+    .filter(([, items]) => items.length)
+    .map(([v, items]) => group('nodate', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
+  return [sections.length
+    ? h('div', { class: 'tb-groups' }, sections)
+    : h('p', { class: 'tb-empty' }, '日付の無いタスクはありません')];
 }
 
 // 進捗タブ
@@ -111,9 +130,11 @@ export function renderList(container, tasks, opts) {
   // 入力欄の初期値：絞り込んだ用途＋選んだ見出し
   const base = areaFilter ? { area: areaFilter } : {};
   if (picked && !picked.startsWith(`${tab}:`)) picked = null;
-  if (picked && tab === 'area' && areaFilter && picked !== `area:${areaFilter}`) picked = null;
+  if (picked && tab !== 'status' && areaFilter && picked !== `${tab}:${areaFilter}`) picked = null;
   const pickedVal = picked ? picked.slice(tab.length + 1) : null;
-  opts.setContext({ ...base, ...(pickedVal ? { [tab]: pickedVal } : {}) });
+  // 日付なしタブの見出しは用途（「ここに追加」で、その用途の日付なしのタスクになる）
+  const ctxKey = tab === 'nodate' ? 'area' : tab;
+  opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
 
   const filterBar = areaFilter
     ? h('div', { class: 'tb-filterbar' },
@@ -131,5 +152,5 @@ export function renderList(container, tasks, opts) {
     filterBar,
     tabStrip(tab, opts.rerender),
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
-      tab === 'status' ? statusTab(scoped, opts) : areaTab(scoped, opts))));
+      tab === 'status' ? statusTab(scoped, opts) : tab === 'nodate' ? nodateTab(scoped, opts) : areaTab(scoped, opts))));
 }
