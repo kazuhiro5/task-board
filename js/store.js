@@ -11,7 +11,8 @@
 // deletedAt：ゴミ箱に入れた時刻（ミリ秒）。あるタスクは getTasks／subscribe に出さない（getTrash だけに出す）。
 //   起動時に、30日より前に消したものを完全に消す（1回の起動で PURGE_MAX 件まで）。
 // repeat：繰り返し（js/repeat.js）。完了にした時、次の回のタスクを新しく作り、その id を completedNextId に覚える。
-//   次の回は必ず今日以降。文書の番号は「元の id＋'_'＋次のやる日」に決めるので、同じ回は二重にできない
+//   次の回は必ず今日以降。文書の番号は「根＋'_'＋次のやる日」に決めるので、同じ回は二重にできない
+//   （根＝id の末尾の '_YYYY-MM-DD' を外したもの。回を重ねても番号が伸びない。Firestore の番号は1500バイトまで）
 //   （完了→戻す→完了を繰り返しても、2台から同時に完了しても1件。あれば作らず、ゴミ箱にあれば戻す）。
 //   完了を戻した時、次の回が一度も触られていなければ（createdAt＝updatedAt）完全に消し、未着手で触られていればゴミ箱へ。
 //
@@ -194,7 +195,7 @@ export async function updateTask(id, patch) {
     const rep = 'repeat' in patch ? p.repeat : normRepeat(cur.repeat);
     if (!wasDone && nowDone && rep) {
       const next = nextOf({ ...cur, ...p }, rep);
-      const nid = `${id}_${next.doDate}`;
+      const nid = `${repeatRoot(id)}_${next.doDate}`;
       const have = allTasks.find((x) => x.id === nid);
       if (!have) ops.push({ type: 'set', id: nid, data: next });
       else if (have.deletedAt) ops.push({ type: 'update', id: nid, data: { deletedAt: null, updatedAt: Date.now() } });
@@ -213,6 +214,11 @@ export async function updateTask(id, patch) {
   if (!ops.length) return backend.update(id, p);
   ops.push({ type: 'update', id, data: p });
   return backend.batch(ops);
+}
+
+// 繰り返しの根：id の末尾に付けた日付（_YYYY-MM-DD、重なっていても全部）を外したもの
+export function repeatRoot(id) {
+  return String(id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '');
 }
 
 // 次の回：同じ名前・分類・内容・繰り返しで、やる日を次の日に。締切があれば同じ日数だけずらす（やる日と締切の差を保つ）。
