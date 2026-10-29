@@ -8,11 +8,12 @@
 //   画面は render(container, tasks, opts) の opts.params で受け取る（params は保存しない。再読み込みで {} に戻る）
 import * as store from './store.js';
 import { mountAdd } from './add.js';
-import { AREAS } from './constants.js';
+import { inlineAdder } from './views/card.js';
 import { renderToday } from './views/today.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
+import { renderTrash } from './views/trash.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -30,12 +31,10 @@ const VIEWS = {
   projects: { label: 'プロジェクト', render: renderProjects },
   list: { label: '一覧', render: renderList },
 };
+// タブ・左の一覧に出さない画面（⋯メニューから開く）。開いた画面としては保存しない
+const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash } };
 
-// 用途 → 色の変数（css/style.css）。CSS変数に日本語を使わないため英字にしている。
-// 使い方：style="--cat: var(--cat-job)"、または class="cat-dot cat-job"（--cat-job の「--」を除いた名前）
-export const AREA_VAR = {
-  大学: '--cat-univ', AI開発: '--cat-ai', 就活: '--cat-job', バイト: '--cat-work', 勉強: '--cat-study', 家事: '--cat-home',
-};
+// 用途の一覧と色は store の areaNames()／areaColor()（Firestore の meta/areas。足した用途も含む）
 const SIDE_PROJECTS = 8; // 左の一覧に出すプロジェクトの数（最近触った順）
 
 // 画面の状態。ctx は画面から入力欄へ渡す「今開いている分類」（初期値に使う）
@@ -77,7 +76,7 @@ let addBox = null; // mountAdd の戻り値（{ contextChanged }）
 
 // 画面を切り替える（タブ・左の一覧・画面の中から呼ぶ）
 function navigate(view, params = {}) {
-  if (!VIEWS[view]) return;
+  if (!ALL_VIEWS[view]) return;
   const changed = view !== state.view || JSON.stringify(params) !== JSON.stringify(state.params);
   state.view = view;
   state.params = { ...params };
@@ -85,7 +84,7 @@ function navigate(view, params = {}) {
   state.ctx = {};
   if (params.area) state.ctx.area = params.area;
   if (params.project) state.ctx.project = params.project;
-  savePref('view', view);
+  if (VIEWS[view]) savePref('view', view);
   render();
   // 描画の後（画面が setContext した後）に、入力欄のタグ表示を今の文脈に合わせる
   if (addBox) addBox.contextChanged();
@@ -124,15 +123,20 @@ function renderSide() {
 
   const areas = el('div', { class: 'side-sec' });
   areas.appendChild(el('div', { class: 'side-label', text: '用途' }));
-  for (const a of AREAS) {
-    const cls = (AREA_VAR[a] || '').replace('--', '');
-    areas.appendChild(sideItem({
+  for (const a of store.areaNames()) {
+    const item = sideItem({
       active: state.view === 'list' && p.area === a,
       onclick: () => navigate('list', { area: a }),
-      html: `<span class="cat-dot ${cls}" aria-hidden="true"></span>`,
+      html: '<span class="cat-dot" aria-hidden="true"></span>',
       label: a,
-    }));
+    });
+    const c = store.areaColor(a);
+    if (c) item.querySelector('.cat-dot').style.background = c;
+    areas.appendChild(item);
   }
+  areas.appendChild(inlineAdder('side-area', {
+    label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: store.addArea, rerender: render,
+  }));
 
   const projs = el('div', { class: 'side-sec' });
   projs.appendChild(el('div', { class: 'side-label', text: 'プロジェクト' }));
@@ -146,6 +150,9 @@ function renderSide() {
       label: name,
     }));
   }
+  projs.appendChild(inlineAdder('side-project', {
+    label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: store.addProject, rerender: render,
+  }));
 
   $('#side').replaceChildren(el('div', { class: 'side-brand', text: 'task-board' }), views, areas, projs);
 }
@@ -179,8 +186,8 @@ function render() {
   renderTabbar();
   renderSide();
   const p = state.params;
-  $('#topTitle').textContent = p.project || p.area || VIEWS[state.view].label;
-  VIEWS[state.view].render($('#view'), store.getTasks(), {
+  $('#topTitle').textContent = p.project || p.area || ALL_VIEWS[state.view].label;
+  ALL_VIEWS[state.view].render($('#view'), store.getTasks(), {
     group: state.group,
     setGroup,
     setContext,
@@ -226,6 +233,13 @@ function renderThemeOpts() {
 document.addEventListener('pointerdown', (e) => {
   const d = document.querySelector('details.user[open]');
   if (d && !d.contains(e.target)) d.open = false;
+});
+
+// ⋯メニューの「ゴミ箱」
+$('#trashBtn').addEventListener('click', () => {
+  const d = document.querySelector('details.user');
+  if (d) d.open = false;
+  navigate('trash', {});
 });
 
 function showApp(signedIn) {

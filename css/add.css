@@ -70,8 +70,14 @@
 .add-title, .tag-date, .tag-newproject, .tag-memo { border-radius: var(--radius-s); }
 .add-error { font-size: 14px; }
 
+/* ---- 開閉（スマホ・PC共通）：ふだんは1行目（タスク名＋追加）だけ。入力欄を押すと .is-open でタグを開く ----
+   （PCも 2026-10-29 オーナー：ずっと出ているとそれがメインに見え、タスクを見たいだけの時に情報が多い） */
+.add:not(.is-open) .add-tags,
+.add:not(.is-open) .add-more-btn,
+.add:not(.is-open) .add-more { display: none; }
+
 /* ---- スマホ：入力欄を画面の下（タブのすぐ上）に固定 ----
-   ふだんは1行目（タスク名＋追加）だけ。入力欄を押すと .is-open でタグを上に開く。
+   タグは1行目の上に開く。
    キーボードが出ている時（html.kb-open）は、キーボードのすぐ上（--kb は add.js が入れる）に合わせる */
 @media (max-width: 839.98px) {
   .add {
@@ -88,9 +94,6 @@
   /* 1行目を一番下に置き、タグはその上に開く */
   .add-line { order: 10; position: sticky; bottom: 0; background: var(--bg); }
   .add-error { order: 9; }
-  .add:not(.is-open) .add-tags,
-  .add:not(.is-open) .add-more-btn,
-  .add:not(.is-open) .add-more { display: none; }
   .add.is-open { box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
 }
 @media (min-width: 840px) {
@@ -138,3 +141,9 @@
     padding-bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+/* ---- 繰り返し（js/repeat.js） ---- */
+.rep-box { display: grid; gap: 6px; flex: 1; min-width: 0; }
+.rep-days .chip { min-width: var(--tap); padding: 0 8px; }
+.rep-month { display: flex; align-items: center; gap: 6px; font-size: 14px; flex-wrap: wrap; }
+.rep-day { width: 5em; }

@@ -4,7 +4,7 @@
 // - それ以外（Firestore・ログインの通信など）：横取りしない
 // ファイルを足した・中身を変えた時は VERSION を上げる。上げると全部まとめて入れ替わる（JSの版ずれを防ぐ）。
 
-const VERSION = 'v16';
+const VERSION = 'v19';
 const CACHE = `task-board-${VERSION}`;
 const FIREBASE_PREFIX = 'https://www.gstatic.com/firebasejs/11.0.2/';
 
@@ -24,6 +24,8 @@ const APP_FILES = [
   './js/edit.js',
   './js/dates.js',
   './js/constants.js',
+  './js/toast.js',
+  './js/repeat.js',
   './js/views/today.js',
   './js/views/week.js',
   './js/views/list.js',
@@ -32,6 +34,7 @@ const APP_FILES = [
   './js/views/modes.js',
   './js/views/sort.js',
   './js/views/dnd.js',
+  './js/views/trash.js',
   './icons/icon-180.png',
   './icons/icon-192.png',
   './icons/icon-512.png',

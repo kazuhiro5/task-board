@@ -6,9 +6,10 @@
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
 // フェーズの行は、プロジェクトの中にいる時（getContext() に project がある時）だけ出す。初期値は getContext().phase。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
-import { addTask, projectNames, getPhases } from './store.js';
-import { AREAS, PRIORITIES, STATUSES } from './constants.js';
+import { addTask, projectNames, getPhases, areaNames, subscribe } from './store.js';
+import { PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
+import { repeatEditor } from './repeat.js';
 
 const KEYS = ['doDate', 'dueDate', 'area', 'project', 'phase', 'priority'];
 const MAX_PROJECTS = 6;
@@ -39,6 +40,7 @@ export function mountAdd(container, getContext) {
   // 選択中のタグ。null＝未選択
   let sel = {};
   let memo = '';
+  let repeat = null; // 繰り返し（js/repeat.js の形）
   let touched = new Set(); // 前回の初期化の後に、手で触った行（KEYS のどれか）
   let lastAdd = 0; // 連打で空の追加になった時、エラーを出さないため
   let open = false; // 「もっと」を開いているか
@@ -83,6 +85,7 @@ export function mountAdd(container, getContext) {
   function resetFromContext() {
     touched = new Set();
     memo = '';
+    repeat = null;
     syncContext();
     renderTags();
   }
@@ -186,13 +189,13 @@ export function mountAdd(container, getContext) {
     const t = todayKey();
     tags.replaceChildren(
       dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]]),
-      simpleRow('area', '用途', AREAS),
+      simpleRow('area', '用途', areaNames()),
     );
     const ctxProject = readContext().project;
     if (ctxProject) tags.append(phaseRow(ctxProject));
 
     // 閉じていても、選択中のものがあれば分かるように件数を出す
-    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0);
+    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0) + (repeat ? 1 : 0);
     moreBtn.textContent = open ? 'たたむ ▴' : `もっと ▾${hidden ? `（${hidden}）` : ''}`;
     moreBtn.setAttribute('aria-expanded', String(open));
     more.hidden = !open;
@@ -207,14 +210,30 @@ export function mountAdd(container, getContext) {
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
       projectRow(),
       simpleRow('priority', '優先度', PRIORITIES),
+      el('div', { class: 'tag-row' }, [
+        el('span', { class: 'tag-label', text: '繰り返し' }),
+        repeatEditor({ value: repeat, base: () => sel.doDate, onChange: (r) => { repeat = r; } }),
+      ]),
       row('内容', [memoBox]),
     );
   }
 
-  // 開閉（スマホだけ効く。PCは CSS で常に全部見せる）：
-  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後に畳む（1行目だけ残る）
+  // 開閉（スマホ・PC共通。PCは上のまま下に開く）：
+  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc で畳む（1行目だけ残る）
+  let quiet = false; // true の間はフォーカスしても開かない（Esc で戻した時）
   function setOpen(v) { container.classList.toggle('is-open', v); }
   title.addEventListener('click', () => setOpen(true));
+  // タグを押すと描き直されてフォーカスが body に落ちることがあるので、document で拾う
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !container.classList.contains('is-open')) return;
+    const ae = document.activeElement;
+    if (ae && ae !== document.body && !container.contains(ae)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setOpen(false);
+    // タグから Esc した時は入力欄へ戻す（戻した時のフォーカスでは開かない）
+    if (document.activeElement !== title) { quiet = true; title.focus(); quiet = false; }
+  });
   document.addEventListener('pointerdown', (e) => {
     if (!container.contains(e.target)) setOpen(false);
   });
@@ -223,7 +242,7 @@ export function mountAdd(container, getContext) {
     // 画面が変わると初期値も変わる。手で選んだ行は消さない
     syncContext();
     renderTags();
-    setOpen(true);
+    if (!quiet) setOpen(true);
   });
   title.addEventListener('input', () => { error.textContent = ''; });
 
@@ -242,6 +261,7 @@ export function mountAdd(container, getContext) {
     // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
     if (!ctx.project || !data.project) delete data.phase;
     if (memo.trim()) data.memo = memo.trim();
+    if (repeat) data.repeat = repeat;
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;
 
     // 待たずに空にする（連打しても同じ名前が2回入らない・オフラインでも続けて入れられる）
@@ -258,6 +278,18 @@ export function mountAdd(container, getContext) {
 
   resetFromContext();
   followKeyboard();
+
+  // 用途・プロジェクトが足されたら描き直す（入力欄の中で打っている時は描き直さない＝打った文字が消えないように）
+  let listSig = '';
+  subscribe(() => {
+    const sig = `${areaNames().join('')}${projectNames().slice(0, MAX_PROJECTS).join('')}`;
+    if (sig === listSig) return;
+    const first = !listSig;
+    listSig = sig;
+    const ae = document.activeElement;
+    if (first || (ae && container.contains(ae) && ae !== title && ae.tagName !== 'BUTTON')) return;
+    renderTags();
+  });
 
   // app.js から呼ぶ：画面を移って文脈（getContext()）が変わった。
   // 手で触っていない行だけ今の文脈に合わせて、タグの表示を描き直す（触った行はそのまま）

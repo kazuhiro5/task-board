@@ -1,8 +1,9 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask } from '../store.js';
+import { updateTask, areaColor } from '../store.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
 import { PRIORITIES, STATUS_LABEL } from '../constants.js';
+import { repeatLabel } from '../repeat.js';
 
 // 要素を作る小さな道具。h('div', { class: 'x', onclick: fn }, '文字', 子要素…)
 export function h(tag, attrs = {}, ...children) {
@@ -22,10 +23,55 @@ export function h(tag, attrs = {}, ...children) {
 
 export const isOpen = (t) => t.status !== 'done';
 
-// 用途の点（色だけに頼らないよう、使う所では用途名の文字と一緒に出す）
-const AREA_KEY = { 大学: 'univ', AI開発: 'ai', 就活: 'job', バイト: 'work', 勉強: 'study', 家事: 'home' };
+// 用途の点（色だけに頼らないよう、使う所では用途名の文字と一緒に出す）。色は store の areaColor（足した用途も）
 export function areaDot(area) {
-  return h('span', { class: `tb-dot tb-dot--${AREA_KEY[area] || 'none'}`, 'aria-hidden': 'true' });
+  const c = area ? areaColor(area) : null;
+  return h('span', { class: 'tb-dot', style: c ? `background:${c}` : null, 'aria-hidden': 'true' });
+}
+
+// 「＋ 用途を追加」などの小さな入力欄。key ごとに開いているか・入力中の文字を覚え、描き直しても消えない。
+// onAdd(name)：足す（同じ名前などは Error を投げる。待たない）。足せたら閉じる
+const adders = {};
+export function inlineAdder(key, { label, placeholder, onAdd, rerender }) {
+  const st = adders[key] || (adders[key] = { open: false, value: '', err: '' });
+  if (!st.open) {
+    return h('button', {
+      type: 'button',
+      class: 'tb-adder-btn',
+      'data-adder': key,
+      onclick: () => { st.open = true; st.err = ''; st.focus = true; rerender(); },
+    }, label);
+  }
+  // 描き直す前にこの入力欄にフォーカスがあったら、新しい入力欄に移す
+  const had = document.activeElement?.dataset?.adderInput === key || st.focus;
+  st.focus = false;
+  const input = h('input', {
+    type: 'text', class: 'tb-adder-input', placeholder, 'aria-label': placeholder, 'data-adder-input': key, maxlength: '40',
+  });
+  input.value = st.value;
+  input.addEventListener('input', () => { st.value = input.value; });
+  const close = () => { st.open = false; st.value = ''; st.err = ''; rerender(); };
+  const submit = (e) => {
+    e.preventDefault();
+    try {
+      const p = onAdd(st.value);
+      if (p && p.catch) p.catch((err) => console.warn('[task-board] 追加に失敗', err));
+      close();
+    } catch (err) {
+      st.err = err.message || String(err);
+      st.focus = true;
+      rerender();
+    }
+  };
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+  const form = h('form', { class: 'tb-adder', 'data-adder': key, autocomplete: 'off', onsubmit: submit },
+    h('div', { class: 'tb-adder-line' },
+      input,
+      h('button', { type: 'submit', class: 'tb-adder-ok' }, '追加'),
+      h('button', { type: 'button', class: 'tb-adder-cancel', 'aria-label': 'やめる', onclick: close }, '×')),
+    st.err ? h('p', { class: 'tb-adder-err', role: 'alert' }, st.err) : null);
+  if (had) requestAnimationFrame(() => { if (input.isConnected) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); } });
+  return form;
 }
 // 行の先頭に置く「● 用途名」
 export function areaMark(area) {
@@ -136,6 +182,8 @@ export function taskCard(task, opts = {}) {
     meta.push(h('span', { class: 'tb-tag tb-due' + (over ? ' is-over' : '') }, `〆${md(task.dueDate)}`));
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
+  const rep = repeatLabel(task.repeat);
+  if (rep) meta.push(h('span', { class: 'tb-tag tb-rep', title: `繰り返し：${rep}` }, `↻${rep}`));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
   if (opts.showPhase && task.phase && !hide.has('phase')) {
     meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));

@@ -5,8 +5,8 @@
 //   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
 //   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
-import { updateTask } from '../store.js';
-import { AREAS, STATUSES } from '../constants.js';
+import { updateTask, areaNames } from '../store.js';
+import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot } from './card.js';
 import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
@@ -68,7 +68,7 @@ function modeBar(scope, mode, rerender) {
 const phaseOf = (x) => (Number.isInteger(x.phase) && x.phase >= 1 ? x.phase : NONE);
 
 function groupsFor(key, list, showDone, cfg = {}) {
-  if (key === 'area') return { order: AREAS, value: (x) => x.area || NONE, label: (v) => v };
+  if (key === 'area') return { order: areaNames(), value: (x) => x.area || NONE, label: (v) => v };
   if (key === 'phase') {
     // 1…N（N＝フェーズの数。もっと大きい番号のタスクがあればそこまで）
     const max = Math.max(cfg.phases || 0, ...list.map((x) => (phaseOf(x) === NONE ? 0 : x.phase)));

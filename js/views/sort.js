@@ -2,8 +2,8 @@
 // - 並び替え▼：手動（order 順）／優先度／プロジェクト／用途。各日・各区分の中の並びにだけ効く
 // - 選んだものは画面ごとに localStorage（tb.sort.week・tb.sort.today）
 // - order：小さいほど上。無いタスクは createdAt で並べる（store.js の normalize と同じ考え）
-import { updateTask } from '../store.js';
-import { AREAS, PRIORITIES } from '../constants.js';
+import { updateTask, areaNames } from '../store.js';
+import { PRIORITIES } from '../constants.js';
 import { h } from './card.js';
 
 export const SORTS = [
@@ -36,7 +36,10 @@ const rank = (list, v) => (v && list.includes(v) ? list.indexOf(v) : list.length
 
 export function sorter(mode) {
   if (mode === 'priority') return (a, b) => rank(PRIORITIES, a.priority) - rank(PRIORITIES, b.priority) || byManual(a, b);
-  if (mode === 'area') return (a, b) => rank(AREAS, a.area) - rank(AREAS, b.area) || byManual(a, b);
+  if (mode === 'area') {
+    const names = areaNames();
+    return (a, b) => rank(names, a.area) - rank(names, b.area) || byManual(a, b);
+  }
   if (mode === 'project') {
     return (a, b) => {
       if (!!a.project !== !!b.project) return a.project ? -1 : 1; // なしは最後
