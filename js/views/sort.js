@@ -86,7 +86,9 @@ export function planDrop({ id, finalIds, byId, datePatch, sameZone, mode }) {
     if (prev && next) {
       const lo = orderKey(prev);
       const hi = orderKey(next);
-      if (hi - lo > MIN_GAP) put(id, { order: (lo + hi) / 2 });
+      const m = (lo + hi) / 2;
+      // 中間値が両隣の間に厳密に入る時だけ使う（小数の丸めで隣と同じ値になると位置がずれるため）
+      if (hi - lo > MIN_GAP && lo < m && m < hi) put(id, { order: m });
       else renumber(); // 詰まりすぎ・前後が逆（週の「〆だけ」の行をまたいだ時など）→ その日の分だけ振り直す
     } else if (prev) put(id, { order: orderKey(prev) + STEP });
     else if (next) put(id, { order: orderKey(next) - STEP });
