@@ -3,7 +3,7 @@
 //   リンクがある用途だけ出す。用途なしは一番下。
 //   「編集」で名前・URL・用途を直す・消す（消すは2回押し。ゴミ箱には入れない）。
 // mountLinkAdd(container)：リンク集の時だけ、タスクの入力欄の代わりに出す「リンクを追加」の入力欄。
-//   見た目と開き方はタスクの入力欄（add.js）と同じ（1行目＝URL＋追加。押すと名前・用途の行が開く）。
+//   見た目と開き方はタスクの入力欄（add.js）と同じ（1行目＝名前＋追加。押すと URL・用途の行が開く）。
 import { getLinks, addLink, updateLink, deleteLink, areaNames, subscribe } from '../store.js';
 import { h, areaDot } from './card.js';
 import { showToast } from '../toast.js';
@@ -36,50 +36,59 @@ const tagRow = (name, ...kids) => h('div', { class: 'tag-row' }, h('span', { cla
 
 // ---- 上（スマホは下）の「リンクを追加」 ----
 export function mountLinkAdd(container) {
-  const st = { name: '', area: null };
-  const url = h('input', {
-    type: 'url', class: 'add-title', placeholder: 'リンクを追加（URL）', 'aria-label': 'URL',
-    inputmode: 'url', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'done',
+  const st = { url: '', area: null };
+  const name = h('input', {
+    type: 'text', class: 'add-title', placeholder: 'リンクを追加（名前）', 'aria-label': '名前', maxlength: '40', enterkeyhint: 'next',
   });
   const error = h('p', { class: 'add-error', role: 'alert' });
   const tags = h('div', { class: 'add-tags' });
   // novalidate：ブラウザの URL の確かめは「https:// の無いアドレス」を断ってしまうため。確かめは store の normUrl で行う
   const form = h('form', { class: 'add-form', autocomplete: 'off', novalidate: true },
-    h('div', { class: 'add-line' }, url, h('button', { type: 'submit', class: 'primary add-submit' }, '追加')),
+    h('div', { class: 'add-line' }, name, h('button', { type: 'submit', class: 'primary add-submit' }, '追加')),
     error, tags);
   container.replaceChildren(form);
+  const urlInput = () => tags.querySelector('input[aria-label="URL"]');
 
   function renderTags() {
-    const name = h('input', {
-      type: 'text', class: 'tag-newproject', placeholder: '空ならアドレスを出す', 'aria-label': '名前', maxlength: '40',
+    const url = h('input', {
+      type: 'url', class: 'tag-newproject', placeholder: 'https://…', 'aria-label': 'URL',
+      inputmode: 'url', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'done',
     });
-    name.value = st.name;
-    name.addEventListener('input', () => { st.name = name.value; });
+    url.value = st.url;
+    url.addEventListener('input', () => { st.url = url.value; error.textContent = ''; });
     tags.replaceChildren(
-      tagRow('名前', h('div', { class: 'tag-chips' }, name)),
+      tagRow('URL', h('div', { class: 'tag-chips' }, url)),
       tagRow('用途', areaChips(st.area, (a) => { st.area = a; renderTags(); })));
   }
   const setOpen = (v) => container.classList.toggle('is-open', v);
-  url.addEventListener('focus', () => setOpen(true));
-  url.addEventListener('click', () => setOpen(true));
-  url.addEventListener('input', () => { error.textContent = ''; });
+  name.addEventListener('focus', () => setOpen(true));
+  name.addEventListener('click', () => setOpen(true));
+  name.addEventListener('input', () => { error.textContent = ''; });
+  // 名前で Enter を押した時、URL がまだ空なら追加せずに URL の欄へ進む（名前の次に URL を入れる順のため）
+  name.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || st.url.trim()) return;
+    e.preventDefault();
+    setOpen(true);
+    urlInput()?.focus();
+  });
   document.addEventListener('pointerdown', (e) => { if (!container.contains(e.target)) setOpen(false); });
-  container.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false); url.focus(); } });
+  container.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); setOpen(false); name.focus(); } });
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     let p;
     try {
-      p = addLink({ url: url.value, name: st.name, area: st.area });
+      p = addLink({ url: st.url, name: name.value, area: st.area });
     } catch (err) {
       error.textContent = err.message || String(err);
-      url.focus();
+      setOpen(true);
+      urlInput()?.focus();
       return;
     }
-    const shown = st.name.trim() || url.value.trim();
+    const shown = name.value.trim() || st.url.trim();
     p.catch((err) => { error.textContent = `「${shown}」を追加できませんでした（${err.message || err}）`; });
-    url.value = '';
-    st.name = '';
+    name.value = '';
+    st.url = '';
     st.area = null;
     error.textContent = '';
     renderTags();
@@ -87,7 +96,7 @@ export function mountLinkAdd(container) {
   });
 
   renderTags();
-  // 用途が足されたら選べるものを描き直す（名前を打っている最中は描き直さない＝打った文字が消えないように）
+  // 用途が足されたら選べるものを描き直す（URL を打っている最中は描き直さない＝打った文字が消えないように）
   let sig = '';
   subscribe(() => {
     const s = areaNames().join('\u0000');

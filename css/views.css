@@ -465,3 +465,9 @@
 .tb-link-edit { flex: none; font-size: 13px; }
 .tb-link-form { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); }
 .tb-link-del { margin-left: auto; }
+/* リンクの入力欄：スマホでも「名前 → その下にURL・用途」の順。
+   タスクの入力欄（add.css）は1行目を一番下に置くが、リンクは名前とURLが上下に並ぶ方が読みやすいため戻す */
+@media (max-width: 839.98px) {
+  #linkAdd .add-line { order: 0; position: static; }
+  #linkAdd .add-error { order: 0; }
+}
