@@ -2,7 +2,7 @@
 // 消し方は card.js の areaMenuItems／projectMenuItems と同じ（2回押し・元に戻す付き）。
 // 左の一覧の横に置かないのは、押し間違えた時の影響が大きいため。
 import { areaNames, areaColor, projectNames, getTasks, addArea, addProject } from '../store.js';
-import { h, areaMenuItems, projectMenuItems, inlineAdder } from './card.js';
+import { h, areaMenuItems, projectMenuItems, inlineAdder, backButton } from './card.js';
 
 function row(name, dot, info, items, rerender) {
   return h('li', { class: 'tb-manage-row' },
@@ -33,6 +33,7 @@ export function renderManageAreas(container, _tasks, opts) {
   const n = counts('area');
   const list = areaNames();
   container.replaceChildren(h('div', { class: 'tb-manage' },
+    h('div', { class: 'tb-sub-top' }, backButton(opts)),
     h('p', { class: 'tb-empty' }, '消すと、その用途のタスクとリンクは「用途なし」になります（タスクは消えません）。2回押すと消えます'),
     list.length
       ? h('ul', { class: 'tb-manage-list' }, list.map((a) => {
@@ -50,6 +51,7 @@ export function renderManageProjects(container, _tasks, opts) {
   const n = counts('project');
   const list = projectNames();
   container.replaceChildren(h('div', { class: 'tb-manage' },
+    h('div', { class: 'tb-sub-top' }, backButton(opts)),
     h('p', { class: 'tb-empty' }, '「プロジェクトだけ削除」はタスクを残し、「タスクもゴミ箱へ」はタスクも30日ゴミ箱に入ります。2回押すと消えます'),
     list.length
       ? h('ul', { class: 'tb-manage-list' }, list.map((p) => {

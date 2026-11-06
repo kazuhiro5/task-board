@@ -66,7 +66,7 @@ export function readBackup() {
     }
     const when = info.exportedAt ? new Date(info.exportedAt) : null;
     const whenText = when && !isNaN(when) ? `${when.getMonth() + 1}/${when.getDate()}の` : '';
-    showToast(`${whenText}バックアップ：タスク${info.tasks}件・リンク${info.links}件。同じものは上書きします`, {
+    showToast(`${whenText}バックアップ：タスク${info.tasks}件・リンク${info.links}件。同じタスクはバックアップの中身で上書きし、後から直した所は消えます。読み込んだ後は「元に戻す」で戻せません`, {
       action: '読み込む',
       ms: 15000,
       onAction: () => {

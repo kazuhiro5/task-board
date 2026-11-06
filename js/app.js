@@ -87,8 +87,14 @@ const isEmpty = (o) => !o || Object.keys(o).length === 0;
 let addBox = null; // mountAdd の戻り値（{ contextChanged }）
 
 // 画面を切り替える（タブ・左の一覧・画面の中から呼ぶ）
+// 検索・ゴミ箱・用途管理・プロジェクト管理（⋯や虫めがねから開く画面）は「◀ 戻る」で開く前の画面へ戻す
+const SUB_VIEWS = ['search', 'trash', 'manageAreas', 'manageProjects'];
+let backTo = { view: 'today', params: {} };
+function goBack() { navigate(backTo.view, backTo.params); }
+
 function navigate(view, params = {}) {
   if (!ALL_VIEWS[view]) return;
+  if (SUB_VIEWS.includes(view) && !SUB_VIEWS.includes(state.view)) backTo = { view: state.view, params: { ...state.params } };
   const changed = view !== state.view || JSON.stringify(params) !== JSON.stringify(state.params);
   state.view = view;
   state.params = { ...params };
@@ -286,6 +292,7 @@ function render() {
     rerender: render,
     params: { ...state.params },
     navigate,
+    goBack,
   });
 }
 

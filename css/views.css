@@ -580,3 +580,7 @@
 .tb-manage-btns { display: flex; flex-wrap: wrap; gap: 6px; }
 .tb-manage-del { color: var(--danger); font-size: 13px; }
 .tb-manage-del.is-armed { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; }
+
+/* 検索・ゴミ箱・管理画面の「◀ 戻る」 */
+.tb-sub-top { display: flex; justify-content: flex-end; margin: 0 0 8px; }
+.tb-back-btn { flex: none; font-size: 14px; }

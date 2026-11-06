@@ -336,3 +336,8 @@ export function projectMenuItems(name, after) {
     { label: `タスク${n}件もゴミ箱へ`, danger: true, confirm: `もう一度押すと${n}件もゴミ箱へ`, onSelect: () => run(true) },
   ];
 }
+
+// 検索・ゴミ箱・管理画面の「◀ 戻る」（開く前の画面へ）
+export function backButton(opts) {
+  return h('button', { type: 'button', class: 'tb-btn tb-back-btn', onclick: () => opts.goBack?.() }, '◀ 戻る');
+}
