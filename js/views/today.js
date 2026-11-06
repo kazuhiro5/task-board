@@ -14,12 +14,12 @@ import { todayKey, toKey, addDays, label } from '../dates.js';
 import { h, isOpen, taskCard, sectionHead } from './card.js';
 import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
 import { enableDrag, dropToDay } from './dnd.js';
-import { updateMany } from '../store.js';
+import { updateMany, areaNames, projectNames } from '../store.js';
 import { showToast } from '../toast.js';
 
 const AHEAD = 14; // 最初に出すのは何日先まで（それより先は「もっと見る」）
 
-let projFilter = null; // 「動いているプロジェクト」で絞り込み中の名前
+let filter = null; // 絞り込み：{ by: 'area'|'project', name } か null
 let doneOpen = false; // 「今日終えたもの」を開いているか
 let showFar = false; // 15日先以降も出しているか
 let armed = null; // 一括ボタンを1回押した：'today' | 'tomorrow' | 'none'
@@ -154,13 +154,13 @@ export function renderToday(container, tasks, opts) {
   const mode = loadSort('today');
   const cmp = sorter(mode);
 
-  // 動いているプロジェクト（未完了がある）
-  const projCount = new Map();
-  for (const x of open) if (x.project) projCount.set(x.project, (projCount.get(x.project) || 0) + 1);
-  const projects = [...projCount.keys()].sort((a, b) => a.localeCompare(b, 'ja'));
-  if (projFilter && !projCount.has(projFilter)) projFilter = null;
+  // 絞り込みの選択肢：未完了がある用途（用途の並び）とプロジェクト（左の一覧の並び）
+  const count = (k, v) => open.filter((x) => x[k] === v).length;
+  const areas = areaNames().filter((a) => count('area', a));
+  const projects = projectNames().filter((p) => count('project', p));
+  if (filter && !(filter.by === 'area' ? areas : projects).includes(filter.name)) filter = null;
 
-  const inScope = (x) => !projFilter || x.project === projFilter;
+  const inScope = (x) => !filter || x[filter.by] === filter.name;
   const used = new Set();
   const take = (pred) => {
     const list = open.filter((x) => !used.has(x.id) && inScope(x) && pred(x)).sort(cmp);
@@ -191,27 +191,29 @@ export function renderToday(container, tasks, opts) {
   const farCount = far.reduce((n, d) => n + byDay.get(d).length, 0);
   const shownDays = showFar ? days : near;
 
-  // 今日の画面で名前だけ追加したら受信箱へ（受け入れ基準4）。プロジェクトで絞り込み中だけ、そのプロジェクトを付ける
-  opts.setContext(projFilter ? { project: projFilter } : {});
+  // 今日の画面で名前だけ追加したら受信箱へ（受け入れ基準4）。絞り込み中だけ、その用途・プロジェクトを付ける
+  opts.setContext(filter ? { [filter.by]: filter.name } : {});
 
-  const topBar = h('div', { class: 'tb-today-top' },
-    projects.length ? h('span', { class: 'tb-projs-label' }, '動いているプロジェクト') : null,
-    sortSelect('today', mode, () => opts.rerender()));
+  // 絞り込みは1つの「選ぶ」欄（用途とプロジェクトを分けて並べる）。ボタンを並べると上が埋まるため
+  const pick = h('select', {
+    class: 'tb-filter-select' + (filter ? ' is-on' : ''), 'aria-label': '絞り込み',
+    onchange: (e) => {
+      const v = e.target.value;
+      filter = v ? { by: v.startsWith('a:') ? 'area' : 'project', name: v.slice(2) } : null;
+      opts.rerender();
+    },
+  },
+  h('option', { value: '' }, '絞り込み：すべて'),
+  areas.length ? h('optgroup', { label: '用途' }, areas.map((a) => h('option', { value: `a:${a}` }, `${a}（${count('area', a)}）`))) : null,
+  projects.length ? h('optgroup', { label: 'プロジェクト' }, projects.map((p) => h('option', { value: `p:${p}` }, `${p}（${count('project', p)}）`))) : null);
+  pick.value = filter ? `${filter.by === 'area' ? 'a' : 'p'}:${filter.name}` : '';
 
-  const chips = projects.length
-    ? h('div', { class: 'tb-projs', role: 'group', 'aria-label': '動いているプロジェクト' },
-      projects.map((p) => h('button', {
-        type: 'button',
-        class: 'tb-chip' + (projFilter === p ? ' is-active' : ''),
-        'aria-pressed': String(projFilter === p),
-        onclick: () => { projFilter = projFilter === p ? null : p; opts.rerender(); },
-      }, p, h('span', { class: 'tb-chip-n' }, String(projCount.get(p))))))
-    : null;
-
-  const filterBar = projFilter
+  const topBar = h('div', { class: 'tb-today-top' }, pick, sortSelect('today', mode, () => opts.rerender()));
+  const chips = null;
+  const filterBar = filter
     ? h('div', { class: 'tb-filter' },
-      h('span', {}, `「${projFilter}」だけを表示中`),
-      h('button', { type: 'button', class: 'tb-link', onclick: () => { projFilter = null; opts.rerender(); } }, '解除'))
+      h('span', {}, `「${filter.name}」だけを表示中`),
+      h('button', { type: 'button', class: 'tb-link', onclick: () => { filter = null; opts.rerender(); } }, '解除'))
     : null;
 
   const ahead = h('div', { class: 'tb-ahead', 'aria-label': 'それ以降' },
@@ -238,7 +240,7 @@ export function renderToday(container, tasks, opts) {
     filterBar,
     overdueBox(overdue, t, opts),
     carryBox(carry, opts),
-    section('今日', today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today' }, { drop: 'today' }),
+    section(`今日　${label(t)}`, today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today', class: 'tb-sec tb-sec--today' }, { drop: 'today' }),
     section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,
     h('h2', { class: 'tb-divider' }, '日付なし'),

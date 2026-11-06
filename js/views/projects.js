@@ -4,9 +4,8 @@
 // opts.params.project があれば、最初からそのプロジェクトの中を開く。
 // 中のリスト・3列はフェーズごとに区切る（フェーズの数は store の getPhases。決定/0007）。
 import { addPhase, getPhases, areaNames, projectNames, addProject } from '../store.js';
-import { h, isOpen, md, areaDot, inlineAdder } from './card.js';
+import { h, isOpen, md, areaDot, inlineAdder, dueTone } from './card.js';
 import { renderModes, resetScope } from './modes.js';
-import { todayKey } from '../dates.js';
 
 let openName = null; // 開いているプロジェクト
 let lastParams = '';
@@ -58,12 +57,11 @@ function projectCard(p, opts) {
       : null,
     h('span', { class: 'tb-pcard-row' },
       h('span', { class: 'tb-pcard-open' }, !p.total ? 'タスク0件' : p.open ? `未完了 ${p.open}件` : 'すべて完了')),
-    h('span', { class: 'tb-pcard-next' + (p.next && p.next.dueDate < todayKey() ? ' is-over' : '') },
+    h('span', { class: 'tb-pcard-next tb-due' + (p.next ? dueTone(p.next.dueDate) : '') },
       p.next ? `次の〆 ${md(p.next.dueDate)}：${p.next.title}` : '締切なし'),
-    p.phases.length
-      ? h('span', { class: 'tb-pcard-phases' }, p.phases.map((f) => h('span', { class: 'tb-pcard-phase' + (f.done === f.total ? ' is-done' : '') },
-        f.done === f.total ? `F${f.n} ✓` : `F${f.n} ${f.done}/${f.total}`)))
-      : null,
+    // 終わったフェーズだけ「F2 ✓」。途中のフェーズは出さない（情報が多いため）。行は空でも残し、カードの大きさをそろえる
+    h('span', { class: 'tb-pcard-phases' }, p.phases.filter((f) => f.done === f.total)
+      .map((f) => h('span', { class: 'tb-pcard-phase is-done' }, `F${f.n} ✓`))),
     h('span', { class: 'tb-progress' },
       h('span', { class: 'tb-bar', role: 'img', 'aria-label': `完了 ${p.done}/${p.total}` },
         h('span', { class: 'tb-bar-fill', style: `width:${pct}%` })),

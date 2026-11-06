@@ -77,6 +77,8 @@
 .tb-tag--doing { color: var(--accent); font-weight: 600; }
 .tb-tag--waiting { color: var(--warn); font-weight: 600; }
 .tb-due.is-over { color: var(--danger); font-weight: 700; }
+.tb-due.is-month { color: var(--due-month); font-weight: 600; }
+.tb-due.is-later { color: var(--ok); }
 .tb-pri--0 { color: var(--on-accent, #fff); background: var(--danger); border-radius: 4px; padding: 0 5px; font-weight: 700; }
 .tb-pri--2 { opacity: .8; }
 
@@ -125,7 +127,7 @@
 .tb-day-head {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap; width: 100%; min-height: var(--tap);
   margin: 0 0 6px; padding: 0 8px; border: 0; border-bottom: 2px solid var(--line); border-radius: 8px 8px 0 0;
-  background: none; text-align: left; font-size: 13px; font-weight: 700; cursor: pointer;
+  background: none; text-align: left; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .tb-day-head:hover { background: var(--accent-weak); }
 .tb-day-head.is-today { border-bottom-color: var(--accent); color: var(--accent); }
@@ -309,8 +311,8 @@
 .tb-pcard-next {
   font-size: 13px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.tb-pcard-next.is-over { color: var(--danger); font-weight: 600; }
-.tb-pcard-phases { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.tb-pcard-phases { min-height: 1.5em; display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .tb-pcard-phase { white-space: nowrap; }
 .tb-pcard-phase.is-done { color: var(--accent); font-weight: 600; }
 .tb-addphase { margin-top: 12px; align-self: flex-start; }
@@ -388,6 +390,17 @@
 .tb-sort-sel:focus-visible { outline: none; }
 .tb-today-top { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; min-width: 0; }
 .tb-today-top .tb-projs-label { width: auto; flex: 1; min-width: 0; }
+.tb-filter-select {
+  font: inherit; font-size: 14px; color: var(--text); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px; min-height: var(--tap); padding: 0 12px; max-width: 60%; min-width: 0;
+}
+.tb-filter-select.is-on { border-color: var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+/* 「今日」の区分：ここから始まると分かるように、見出しを大きく・緑の線で目立たせる */
+.tb-sec--today { margin-top: 6px; }
+.tb-sec--today > .tb-sec-head {
+  font-size: 17px; color: var(--accent); padding: 6px 0 6px 10px; margin-bottom: 8px;
+  border-left: 4px solid var(--accent); background: var(--accent-weak); border-radius: 0 var(--radius-s) var(--radius-s) 0;
+}
 .tb-today-top .tb-sort { margin-left: auto; }
 
 /* ---- 引きずって動かす（js/views/dnd.js） ---- */

@@ -19,6 +19,7 @@
   --on-accent: #FFFFFF; /* --accent の上に載せる文字 */
   --danger: #CF222E;
   --warn: #9A6700;
+  --due-month: #C2410C; /* 締切が今月：オレンジ（白の上で比 4.5 以上。赤の期限切れと見分けられる明るさ） */
   --ok: #1A7F37;
 
   --cat-univ: #0072B2;
@@ -49,6 +50,7 @@
     --on-accent: #0D1117;
     --danger: #F85149;
     --warn: #D29922;
+    --due-month: #F0884A;
     --ok: #3FB950;
     --cat-univ: #56B4E9;
     --cat-ai: #E08FC0;
@@ -68,6 +70,7 @@
   --accent: #3FB950;
   --accent-weak: #12261A;
   --on-accent: #0D1117;
+  --due-month: #F0884A;
   --danger: #F85149;
   --warn: #D29922;
   --ok: #3FB950;

@@ -161,6 +161,14 @@ function pressBody(task, card) {
 
 let memoSeq = 0;
 
+// 締切の色分け（どの画面でも同じ）：過ぎた＝赤、今月中＝オレンジ、来月以降＝緑。完了したものは色を付けない
+export function dueTone(dueDate, done = false) {
+  if (!dueDate || done) return '';
+  const t = todayKey();
+  if (dueDate < t) return ' is-over';
+  return dueDate.slice(0, 7) === t.slice(0, 7) ? ' is-month' : ' is-later';
+}
+
 // タスクの1行。opts.badges：タイトルの前に出す小さな印（例：['持ち越し']）
 //              opts.hide：メタ情報から省く項目（例：['doDate']）
 //              opts.dueMark：締切の日として置いた行（週の画面。〆を目立たせる）
@@ -178,8 +186,7 @@ export function taskCard(task, opts = {}) {
     meta.push(h('span', { class: `tb-tag tb-pri tb-pri--${PRIORITIES.indexOf(task.priority)}` }, `優先${task.priority}`));
   }
   if (task.dueDate && !hide.has('dueDate')) {
-    const over = !done && task.dueDate < t;
-    meta.push(h('span', { class: 'tb-tag tb-due' + (over ? ' is-over' : '') }, `〆${md(task.dueDate)}`));
+    meta.push(h('span', { class: 'tb-tag tb-due' + dueTone(task.dueDate, done) }, `〆${md(task.dueDate)}`));
   }
   if (task.doDate && !hide.has('doDate')) meta.push(h('span', { class: 'tb-tag' }, relLabel(task.doDate)));
   const rep = repeatLabel(task.repeat);
