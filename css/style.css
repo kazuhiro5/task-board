@@ -208,6 +208,8 @@ button { font: inherit; color: inherit; }
 .side-item.is-active { background: var(--accent-weak); color: var(--text); font-weight: 600; }
 .side-item.is-active svg { color: var(--accent); }
 .side-empty { font-size: 13px; color: var(--muted); padding: 0 10px; }
+.side-item[draggable="true"] { cursor: grab; }
+.side-item.is-dragging { opacity: .5; background: var(--accent-weak); }
 
 /* スマホ：下のタブと入力欄のぶん、本文の下に余白 */
 @media (max-width: 839.98px) {

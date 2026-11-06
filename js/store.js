@@ -20,7 +20,8 @@
 // 文書の番号は encodeURIComponent(名前)（「大学/ゼミ」の / がパスの区切りにならないように。「.」も %2E に）。
 // 文書が無いプロジェクトはフェーズ5つとして扱う。「＋ プロジェクトを追加」でタスクが0件でも文書を作る（その名前も一覧に出す）。
 //
-// 用途の一覧：users/{uid}/meta/areas に { list: [{ name, color }], updatedAt }。文書が無ければ constants.AREAS の6つ。
+// 用途の一覧：users/{uid}/meta/areas に { list: [{ name, color }], projectOrder: [名前], updatedAt }。文書が無ければ constants.AREAS の6つ。
+//   list の並び＝用途の並び。projectOrder＝左の一覧で引きずって決めたプロジェクトの順（別の文書にせず、読み込みを1つ増やさない）。
 //
 // リンク集：users/{uid}/links/{自動の番号} に { area（null＝用途なし）, name, url, createdAt, updatedAt }。
 // 1件1文書にしている（一覧を1つの文書にまとめると、2台で同時に足した・消した時に片方が消えるため）。
@@ -39,6 +40,7 @@ let tasks = []; // ゴミ箱の中を除いたもの（画面に渡す）
 let projects = new Map(); // プロジェクト名 → { phases, updatedAt }
 let areaList = null; // 用途の一覧（null＝文書なし。決まった6つとして扱う）
 let links = []; // リンク集（足した順）
+let projectOrder = []; // 左の一覧で引きずって決めたプロジェクトの順（meta/areas の projectOrder）
 
 export const DEFAULT_PHASES = 5;
 const TRASH_DAYS = 30;
@@ -211,7 +213,26 @@ export function projectNames() {
   for (const [name, p] of projects) {
     if (name) last.set(name, Math.max(last.get(name) || 0, p.updatedAt || 0));
   }
-  return [...last.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+  const recent = [...last.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+  if (!projectOrder.length) return recent;
+  // 並べ替えた後に増えたプロジェクトは上に出す（左の一覧は上から数件だけなので、下に回すと見えなくなる）
+  const ranked = new Set(projectOrder);
+  return [...recent.filter((n) => !ranked.has(n)), ...projectOrder.filter((n) => last.has(n))];
+}
+
+// 左の一覧で引きずって並べ替えた時。names は新しい順の名前
+export function reorderAreas(names) {
+  const byName = new Map(getAreas().map((a) => [a.name, a]));
+  const list = names.filter((n) => byName.has(n)).map((n) => byName.get(n));
+  for (const a of getAreas()) if (!names.includes(a.name)) list.push(a);
+  areaList = list;
+  emit();
+  return backend.setMeta({ list });
+}
+export function reorderProjects(names) {
+  projectOrder = [...names];
+  emit();
+  return backend.setMeta({ projectOrder });
 }
 
 function normalize(data) {
@@ -377,6 +398,8 @@ async function firestoreBackend(uid) {
   const areasRef = doc(db, 'users', uid, 'meta', 'areas');
   const unsubA = onSnapshot(areasRef, (snap) => {
     const list = snap.exists() ? snap.data().list : null;
+    const po = snap.exists() ? snap.data().projectOrder : null;
+    projectOrder = Array.isArray(po) ? po.filter((n) => typeof n === 'string') : [];
     areaList = Array.isArray(list) && list.length
       ? list.filter((a) => a && typeof a.name === 'string' && a.name).map((a) => ({ name: a.name, color: a.color || null }))
       : null;
@@ -405,6 +428,8 @@ async function firestoreBackend(uid) {
     setProject: (name, data) => setDoc(doc(pcol, projectDocId(name)), data, { merge: true }),
     // 一覧を丸ごと上書きしない（2台で同時に足しても両方残る。オフラインでも書ける）
     addAreas: (items) => setDoc(areasRef, { list: arrayUnion(...items), updatedAt: Date.now() }, { merge: true }),
+    // 並べ替えは並び全体を書く（順番は arrayUnion では表せないため）
+    setMeta: (patch) => setDoc(areasRef, { ...patch, updatedAt: Date.now() }, { merge: true }),
     addLink: (data) => addDoc(lcol, data).then((r) => r.id),
     updateLink: (id, data) => updateDoc(doc(lcol, id), data),
     deleteLink: (id) => deleteDoc(doc(lcol, id)),
@@ -436,6 +461,7 @@ function demoBackend() {
   ]);
   projects = new Map();
   areaList = null;
+  projectOrder = [];
   setLinks([
     { id: 'demoL1', area: '大学', name: 'manaba', url: 'https://manaba.cit.ac.jp/', createdAt: 1 },
     { id: 'demoL2', area: '大学', name: '', url: 'https://portal.it-chiba.ac.jp/', createdAt: 2 },
@@ -452,6 +478,7 @@ function demoBackend() {
     batch: async (ops) => { for (const o of ops) apply(o); emit(); },
     setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases, updatedAt: data.updatedAt }); emit(); },
     addAreas: async () => { emit(); },
+    setMeta: async () => { emit(); },
     addLink: async (data) => { const id = `demoL${++n}`; setLinks([...links, { ...data, id }]); emit(); return id; },
     updateLink: async (id, data) => { setLinks(links.map((x) => (x.id === id ? { ...x, ...data } : x))); emit(); },
     deleteLink: async (id) => { setLinks(links.filter((x) => x.id !== id)); emit(); },
@@ -476,6 +503,7 @@ export function stop() {
   setAll([]);
   projects = new Map();
   areaList = null;
+  projectOrder = [];
   links = [];
   emit();
 }

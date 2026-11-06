@@ -122,6 +122,7 @@ function sideItem({ active, onclick, html, label, count }) {
 }
 
 function renderSide() {
+  if (sideDragging) return;
   const p = state.params;
   const views = el('div', { class: 'side-sec' });
   for (const [key, v] of Object.entries(VIEWS)) {
@@ -143,6 +144,7 @@ function renderSide() {
       label: a,
       count: counts.get(a) || 0,
     });
+    item.dataset.name = a;
     const c = store.areaColor(a);
     if (c) item.querySelector('.cat-dot').style.background = c;
     areas.appendChild(item);
@@ -162,6 +164,7 @@ function renderSide() {
       html: icon('project'),
       label: name,
     }));
+    projs.lastChild.dataset.name = name;
   }
   projs.appendChild(inlineAdder('side-project', {
     label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: store.addProject, rerender: render,
@@ -181,6 +184,45 @@ function renderSide() {
   const brand = el('div', { class: 'side-brand' });
   brand.append(el('span', { class: 'side-brand-name', text: 'task-board' }), toggle);
   $('#side').replaceChildren(brand, views, areas, projs);
+  sortable(areas, (names) => store.reorderAreas(names));
+  sortable(projs, (names) => {
+    // 左に出していない（9件目以降の）プロジェクトは、並べ替えた分の後ろに今の順のまま付ける
+    const rest = store.projectNames().filter((n) => !names.includes(n));
+    store.reorderProjects([...names, ...rest]);
+  });
+}
+
+// 左の一覧の用途・プロジェクトを引きずって並べ替える。左の一覧はPC・iPad（マウス・トラックパッド）だけなので、
+// 標準の draggable で足りる（スマホの指には効かないが、スマホに左の一覧は無い）
+let sideDragging = false; // 引きずっている間は左の一覧を描き直さない（つかんだ要素が消えるため）
+function sortable(sec, onDone) {
+  const items = () => [...sec.querySelectorAll('.side-item[data-name]')];
+  const before = items().map((x) => x.dataset.name).join('|');
+  for (const it of items()) {
+    it.draggable = true;
+    it.addEventListener('dragstart', (e) => {
+      sideDragging = true;
+      it.classList.add('is-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', it.dataset.name);
+    });
+    it.addEventListener('dragend', () => {
+      it.classList.remove('is-dragging');
+      sideDragging = false;
+      const names = items().map((x) => x.dataset.name);
+      if (names.join('|') !== before) onDone(names);
+      else renderSide();
+    });
+  }
+  sec.addEventListener('dragover', (e) => {
+    const cur = sec.querySelector('.side-item.is-dragging');
+    if (!cur) return; // 別の区分（用途↔プロジェクト）からは受けない
+    e.preventDefault();
+    const after = items().find((x) => x !== cur && e.clientY < x.getBoundingClientRect().top + x.offsetHeight / 2);
+    if (after) after.before(cur);
+    else items().filter((x) => x !== cur).at(-1)?.after(cur);
+  });
+  sec.addEventListener('drop', (e) => e.preventDefault());
 }
 
 // 画面から呼ぶ：今開いている分類を入力欄の初期値にする（例：{ area: '就活' }）
