@@ -12,6 +12,7 @@ import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot
 import { loadSort, saveSort, sorter, sortSelect, planDrop, saveWrites } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
 import { showToast } from '../toast.js';
+import { noDateStrip } from './week.js';
 
 // cfg.hide（例：プロジェクトの中では ['project']）を、すべての行に足す
 let extraHide = [];
@@ -311,8 +312,7 @@ function colsMode(tasks, cfg, s) {
 // 週の画面と同じく、行を別の日へ引きずる・同じ日の中で並べ替えられる。並び替え▼は週の画面と共通（tb.sort.week）。
 // 「日付なし」の行は日の列へ引きずり出せる（日付なしへは落とせない）
 function calMode(tasks, cfg, s) {
-  const sortMode = loadSort('week');
-  const cmp = sorter(sortMode);
+  const cmp = sorter('manual'); // 並び替えの欄は置かない（引きずって並べ替えられるため。週の画面と同じ）
   const t = todayKey();
   const days = weekDays(addDays(t, s.weekOffset * 7));
   if (s.pickedDay && !days.includes(s.pickedDay)) s.pickedDay = null;
@@ -323,13 +323,10 @@ function calMode(tasks, cfg, s) {
     h('button', { type: 'button', class: 'tb-btn', onclick: () => go(s.weekOffset - 1) }, '‹ 前の週'),
     h('button', { type: 'button', class: 'tb-btn' + (s.weekOffset === 0 ? ' is-active' : ''), 'aria-pressed': String(s.weekOffset === 0), onclick: () => go(0) }, '今週'),
     h('button', { type: 'button', class: 'tb-btn', onclick: () => go(s.weekOffset + 1) }, '次の週 ›'),
-    sortSelect('week', sortMode, () => cfg.rerender()),
     h('span', { class: 'tb-weekrange' }, `${md(days[0])} 〜 ${md(days[6])}`));
 
-  const noDate = tasks.filter((x) => isOpen(x) && !x.doDate && !x.dueDate).sort(cmp);
-  const band = h('section', { class: 'tb-nodate', 'data-drop': 'nodate' },
-    sectionHead('日付なし', noDate.length),
-    noDate.length ? h('div', { class: 'tb-cards tb-nodate-cards' }, noDate.map((x) => taskCard(x))) : null);
+  // 日付なしは週の画面と同じ帯（ボタンで開く・2行で横に流す）
+  const band = noDateStrip(tasks, cmp, cfg);
 
   const cols = days.map((d) => {
     const planned = tasks.filter((x) => isOpen(x) && x.doDate === d).sort(cmp);
@@ -358,7 +355,7 @@ function calMode(tasks, cfg, s) {
   });
 
   const grid = h('div', { class: 'tb-cal' }, nav, band, h('div', { class: 'tb-days' }, cols));
-  enableDrag(grid, dayDrag('.tb-cal', () => loadSort('week'), () => { saveSort('week', 'manual'); cfg.rerender(); }));
+  enableDrag(grid, dayDrag('.tb-cal', () => 'manual', () => cfg.rerender()));
   return [grid];
 }
 

@@ -17,7 +17,8 @@ let stripOpen = false; // 日付なしを開いているか（ふだんは閉じ
 let stripAll = false; // 日付なしの帯を折り返して全部出しているか
 
 // 日付なしの帯。PCのマウスでは横に流しにくいので、左右の送りボタンを付ける
-function noDateStrip(tasks, cmp, opts) {
+// プロジェクトのカレンダー（modes.js）でも使う。opts は rerender があればよい
+export function noDateStrip(tasks, cmp, opts) {
   const items = tasks.filter((x) => isOpen(x) && !x.doDate).sort(cmp);
   if (!items.length) return null;
   const toggle = h('button', {
