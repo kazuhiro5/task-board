@@ -18,7 +18,7 @@ import { renderTrash } from './views/trash.js';
 import { renderSearch, focusSearch } from './views/search.js';
 import { showToast } from './toast.js';
 import { renderLinks, mountLinkAdd } from './views/links.js';
-import { writeBackup, lastBackupLabel } from './backup.js';
+import { writeBackup, lastBackupLabel, readBackup } from './backup.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -30,6 +30,7 @@ const ICONS = {
   sideClose: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>',
   sideOpen: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
   links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 };
@@ -271,7 +272,8 @@ function setGroup(g) {
 function render() {
   // リンク集の時だけ、タスクの入力欄の代わりにリンクの入力欄を出す
   const onLinks = state.view === 'links';
-  $('#add').hidden = onLinks;
+  // 検索・用途管理・プロジェクト管理ではタスクの入力欄を出さない（その画面の入力欄と紛れるため）
+  $('#add').hidden = onLinks || ['search', 'manageAreas', 'manageProjects'].includes(state.view);
   $('#linkAdd').hidden = !onLinks;
   renderTabbar();
   renderSide();
@@ -335,24 +337,35 @@ $('#backupBtn').addEventListener('click', async () => {
   showBackupLast();
 });
 
-// 右上の「元に戻す」と Ctrl+Z（⌘Z）：変えた順に1つずつ戻す（store の履歴。保存ボタンは置かない）
+// 右上の「元に戻す」「やり直す」：変えた順に1つずつ戻す／戻したものをやり直す（store の履歴。保存ボタンは置かない）
+// キー：Ctrl+Z（⌘Z）で戻す、Ctrl+Shift+Z（⌘⇧Z）か Ctrl+Y でやり直す
 function doUndo() {
   if (store.undo()) showToast('1つ前に戻しました');
   else showToast('戻せる操作はありません');
 }
+function doRedo() {
+  if (store.redo()) showToast('やり直しました');
+  else showToast('やり直せる操作はありません');
+}
 $('#undoBtn').insertAdjacentHTML('afterbegin', icon('undo'));
 $('#undoBtn').addEventListener('click', doUndo);
-const syncUndo = () => { $('#undoBtn').disabled = !store.canUndo(); };
+$('#redoBtn').insertAdjacentHTML('afterbegin', icon('redo'));
+$('#redoBtn').addEventListener('click', doRedo);
+const syncUndo = () => { $('#undoBtn').disabled = !store.canUndo(); $('#redoBtn').disabled = !store.canRedo(); };
 store.onHistory(syncUndo);
 syncUndo();
 document.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  const k = e.key.toLowerCase();
+  const isUndo = k === 'z' && !e.shiftKey;
+  const isRedo = (k === 'z' && e.shiftKey) || (k === 'y' && !e.shiftKey);
+  if (!isUndo && !isRedo) return;
   const t = e.target;
   // 文字を打っている所では、ブラウザの文字の取り消しを優先する
   if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
   if ($('#appRoot').hidden) return;
   e.preventDefault();
-  doUndo();
+  if (isUndo) doUndo(); else doRedo();
 });
 
 // 上の虫めがね・「/」キー（打っている途中でない時）で検索を開く
@@ -366,6 +379,13 @@ document.addEventListener('keydown', (e) => {
   if ($('#appRoot').hidden) return;
   e.preventDefault();
   openSearch();
+});
+
+// ⋯メニューの「バックアップを読み込む」
+$('#restoreBtn').addEventListener('click', () => {
+  const d = document.querySelector('details.user');
+  if (d) d.open = false;
+  readBackup();
 });
 
 // ⋯メニューの「用途管理」「プロジェクト管理」（削除はここからだけ）

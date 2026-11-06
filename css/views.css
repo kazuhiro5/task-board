@@ -450,22 +450,24 @@
 .tb-danger.is-armed { background: var(--danger); border-color: var(--danger); color: var(--on-accent); font-weight: 700; }
 
 /* ---- 今日：期限切れ（畳んだ1行。赤は件数だけ） ---- */
-/* 期限切れ・持ち越し：「明日 1」の見出しと同じくらい控えめな小さいボタンを横に並べる。
-   幅は「期限切れ 1000件 ▸」が入るくらいで止める（横いっぱいの枠は主張が強く、今日の予定より先に目に入るため） */
-.tb-od-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 8px; margin: 0 0 10px; }
+/* 期限切れ・持ち越し：「明日 1」の見出しと同じ見た目（名前＋件数の丸）で縦に並べ、押すと中身が開く。
+   横いっぱいの枠にしないのは、主張が強く今日の予定より先に目に入るため */
+.tb-od-wrap { display: flex; flex-direction: column; align-items: stretch; gap: 2px; margin: 0 0 10px; }
 .tb-od-wrap > .tb-sec { margin: 0; }
-.tb-od-wrap > .tb-sec.is-open { flex: 1 0 100%; }
-.tb-od-head { margin: 0 0 6px; font-size: 13px; }
-.tb-od-wrap > .tb-sec:not(.is-open) .tb-od-head { margin: 0; }
+.tb-od-head { margin: 0; font-size: 13px; }
 .tb-od-btn {
-  display: inline-flex; align-items: center; gap: 6px; min-width: 9.5em; min-height: 32px;
-  padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px;
+  padding: 0 6px; margin: 0 -6px; border: 0; border-radius: var(--radius-s); background: none;
   font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; cursor: pointer;
 }
-.tb-od-btn:hover { border-color: var(--muted); }
-.tb-od-n { color: var(--danger); font-weight: 700; }
-.tb-carry .tb-od-n { color: var(--text); } /* 持ち越しは期限切れほど急がないので赤にしない */
-.tb-od-chev { margin-left: auto; font-size: 12px; }
+.tb-od-btn:hover { background: var(--accent-weak); }
+.tb-od-n {
+  font-size: 12px; font-weight: 600; color: var(--danger);
+  background: var(--surface); border: 1px solid currentColor; border-radius: 999px; padding: 0 8px;
+}
+.tb-carry .tb-od-n { color: var(--muted); border-color: var(--line); } /* 持ち越しは期限切れほど急がないので赤にしない */
+.tb-od-chev { font-size: 11px; color: var(--muted); }
+.tb-od-wrap > .tb-sec.is-open > .tb-od-body { margin: 4px 0 8px; }
 .tb-od-body { display: grid; gap: 8px; }
 .tb-od-bulk { display: flex; flex-wrap: wrap; gap: 6px; }
 .tb-od-move { font-size: 13px; }
@@ -555,11 +557,9 @@
 
 /* ---- 検索 ---- */
 .tb-search-view { max-width: 1080px; }
-.tb-search {
-  width: 100%; min-height: 44px; padding: 0 14px; margin: 0 0 14px; font: inherit; font-size: 16px;
-  color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
-}
-.tb-search:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.tb-search-form { margin: 4px 0 14px; }
+.tb-search-go { background: var(--due-month); }
+.tb-search:focus { outline-color: var(--due-month); border-color: var(--due-month); }
 /* リンクの行は tb-card の見た目を使わない（引きずりの印として付けているだけ） */
 .tb-link-item.tb-card { background: none; border: 0; border-radius: 0; align-items: center; flex-wrap: nowrap; }
 .tb-link-grip.tb-body {

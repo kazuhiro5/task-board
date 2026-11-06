@@ -53,62 +53,86 @@ function setAll(list) {
   tasks = list.filter((x) => !x.deletedAt);
 }
 
-// ---- 元に戻す（履歴） ----
+// ---- 元に戻す・やり直す（履歴） ----
 // 変えるたびに「戻し方」を積み、undo() で新しいものから1つずつ戻す（右上のボタン・Ctrl+Z・お知らせの「元に戻す」）。
+// 戻した操作は redo() でやり直せる（右上のボタン・Ctrl+Shift+Z・Ctrl+Y）。新しく何か変えたら、やり直しの分は消える。
 // 保存ボタンは作らない（変えた瞬間に保存する作りのまま。押し忘れで消えるのを防ぐため）。
 // 戻し方は待たずに呼ぶ（Firestore はオフラインだと Promise が終わらないが、端末内にはすぐ入る）。
-// 1つの操作で何件も書く時（引きずって並べ替える等）は group() でまとめて1回分にする
+// 1つの操作で何件も書く時（引きずって並べ替える等）は group() でまとめて1回分にする。
+// 戻す・やり直す最中の書き込みは collect に集め、それが反対向きの1回分になる
 const HISTORY_MAX = 30;
 let history = [];
+let redoStack = [];
 let txn = null; // group() の中で集めている戻し方
-let replaying = false; // 戻している最中（その書き込みは履歴に積まない）
+let collect = null; // 戻す・やり直すの最中に集めている反対向きの戻し方
+let muted = 0; // quiet() の中（積まない・集めない）
 let historyListeners = [];
-function record(fn, label) {
-  if (replaying) return null;
+const notifyHistory = () => { for (const cb of historyListeners) cb(); };
+function record(fn) {
+  if (muted) return null;
+  if (collect) { collect.push(fn); return null; }
   if (txn) { txn.push(fn); return null; }
-  return pushEntry([fn], label);
+  redoStack = [];
+  return pushEntry({ fns: [fn] });
 }
-function pushEntry(fns, label = '') {
-  const e = { fns, label };
+function pushEntry(e) {
   history = [...history, e].slice(-HISTORY_MAX);
-  for (const cb of historyListeners) cb(history.length);
+  notifyHistory();
   return e;
 }
 export function group(label, fn) {
-  if (replaying) return fn();
+  if (collect || muted) return fn();
   const outer = txn;
   if (!outer) txn = [];
   try { return fn(); } finally {
     if (!outer) {
       const fns = txn;
       txn = null;
-      if (fns.length) pushEntry(fns, label);
+      if (fns.length) { redoStack = []; pushEntry({ fns }); }
     }
   }
 }
 // 今いちばん新しい履歴（お知らせの「元に戻す」が、その操作の分だけを戻すために持つ）
 export function lastHistory() { return history[history.length - 1] || null; }
 export function canUndo() { return history.length > 0; }
+export function canRedo() { return redoStack.length > 0; }
 export function onHistory(cb) { historyListeners.push(cb); }
+function run(fns) {
+  for (const f of [...fns].reverse()) {
+    try { const r = f(); r?.catch?.((err) => console.warn('[task-board] 戻せませんでした', err)); } catch (err) { console.warn('[task-board] 戻せませんでした', err); }
+  }
+}
 // entry を指定しなければ一番新しいもの。戻したら true
 export function undo(entry) {
   const e = entry || history[history.length - 1];
   if (!e || !history.includes(e)) return false;
   history = history.filter((x) => x !== e);
-  for (const cb of historyListeners) cb(history.length);
-  replaying = true;
-  try {
-    for (const f of [...e.fns].reverse()) {
-      try { const r = f(); r?.catch?.((err) => console.warn('[task-board] 元に戻せませんでした', err)); } catch (err) { console.warn('[task-board] 元に戻せませんでした', err); }
-    }
-  } finally { replaying = false; }
+  collect = [];
+  try { run(e.fns); } finally {
+    const back = collect;
+    collect = null;
+    // 消す系（again がある）は、やり直す＝もう一度消す
+    redoStack = [...redoStack, e.again ? { fns: [e.again], again: e.again } : { fns: back }];
+  }
+  notifyHistory();
+  return true;
+}
+export function redo() {
+  const e = redoStack[redoStack.length - 1];
+  if (!e) return false;
+  redoStack = redoStack.slice(0, -1);
+  collect = [];
+  try { run(e.fns); } finally {
+    const back = collect;
+    collect = null;
+    pushEntry(e.again ? { fns: back, again: e.again } : { fns: back });
+  }
   return true;
 }
 // 履歴に積まずに書く（消す系の関数が、自分の戻し方を1つだけ積むため）
 function quiet(fn) {
-  const was = replaying;
-  replaying = true;
-  try { return fn(); } finally { replaying = was; }
+  muted++;
+  try { return fn(); } finally { muted--; }
 }
 
 function emit() {
@@ -210,6 +234,43 @@ export function exportData() {
     areas: getAreas(),
     links,
   };
+}
+
+// バックアップのファイル（exportData の形）を読み込む。
+// 同じ id のタスク・リンクは上書きし、ファイルに無いものは消さない（足し合わせる）。用途は名前で重ならないように足す。
+// 履歴（元に戻す）には積まない（件数が多く、戻すより読み込み直す方が確か）。読み込んだ件数を返す
+export function checkBackup(data) {
+  if (!data || data.app !== 'task-board' || !Array.isArray(data.tasks)) throw new Error('task-board のバックアップのファイルではありません');
+  return {
+    tasks: data.tasks.filter((t) => t && typeof t.id === 'string' && typeof t.title === 'string').length,
+    links: Array.isArray(data.links) ? data.links.length : 0,
+    projects: Array.isArray(data.projects) ? data.projects.length : 0,
+    exportedAt: data.exportedAt || '',
+  };
+}
+export function importData(data) {
+  checkBackup(data);
+  const tasksIn = data.tasks.filter((t) => t && typeof t.id === 'string' && typeof t.title === 'string');
+  const ops = tasksIn.map(({ id, ...rest }) => ({ type: 'set', id, data: rest }));
+  const writes = [backend.batch(ops)];
+  for (const p of Array.isArray(data.projects) ? data.projects : []) {
+    if (!p || typeof p.name !== 'string' || !p.name) continue;
+    const { name, ...rest } = p;
+    projects = new Map(projects).set(name, { ...(projects.get(name) || {}), ...rest });
+    writes.push(backend.setProject(name, { name, ...rest }));
+  }
+  if (Array.isArray(data.areas)) {
+    const have = new Set(getAreas().map((a) => a.name));
+    const add = data.areas.filter((a) => a && typeof a.name === 'string' && !have.has(a.name)).map((a) => ({ name: a.name, color: a.color || null }));
+    if (add.length) { areaList = [...getAreas(), ...add]; writes.push(backend.setMeta({ list: areaList })); }
+  }
+  const linksIn = Array.isArray(data.links) ? data.links.filter((l) => l && typeof l.id === 'string' && typeof l.url === 'string') : [];
+  for (const { id, ...rest } of linksIn) writes.push(backend.setLink(id, rest));
+  const byId = new Map(links.map((x) => [x.id, x]));
+  for (const l of linksIn) byId.set(l.id, l);
+  setLinks([...byId.values()]);
+  emit();
+  return { tasks: tasksIn.length, links: linksIn.length, done: Promise.all(writes) };
 }
 
 // ---- リンク集 ----
@@ -481,6 +542,7 @@ export async function purgeTask(id) {
 export function deletePhase(project, n) {
   const r = quiet(() => deletePhaseRaw(project, n));
   r.entry = record(() => quiet(() => r.undo()));
+  if (r.entry) r.entry.again = () => deletePhase(project, n);
   return r;
 }
 function deletePhaseRaw(project, n) {
@@ -516,6 +578,7 @@ function deletePhaseRaw(project, n) {
 export function deleteArea(name) {
   const r = quiet(() => deleteAreaRaw(name));
   r.entry = record(() => quiet(() => r.undo()));
+  if (r.entry) r.entry.again = () => deleteArea(name);
   return r;
 }
 function deleteAreaRaw(name) {
@@ -546,6 +609,7 @@ function deleteAreaRaw(name) {
 export function deleteProject(name, withTasks) {
   const r = quiet(() => deleteProjectRaw(name, withTasks));
   r.entry = record(() => quiet(() => r.undo()));
+  if (r.entry) r.entry.again = () => deleteProject(name, withTasks);
   return r;
 }
 function deleteProjectRaw(name, withTasks) {
@@ -676,6 +740,7 @@ async function firestoreBackend(uid) {
     addLink: (data) => addDoc(lcol, data).then((r) => r.id),
     updateLink: (id, data) => updateDoc(doc(lcol, id), data),
     deleteLink: (id) => deleteDoc(doc(lcol, id)),
+    setLink: (id, data) => setDoc(doc(lcol, id), data),
     stop: () => { unsub(); unsubP(); unsubA(); unsubL(); },
   };
 }
@@ -727,6 +792,7 @@ function demoBackend() {
     addLink: async (data) => { const id = `demoL${++n}`; setLinks([...links, { ...data, id }]); emit(); return id; },
     updateLink: async (id, data) => { setLinks(links.map((x) => (x.id === id ? { ...x, ...data } : x))); emit(); },
     deleteLink: async (id) => { setLinks(links.filter((x) => x.id !== id)); emit(); },
+    setLink: async (id, data) => { setLinks([...links.filter((x) => x.id !== id), { ...data, id }]); emit(); },
     stop: () => {},
   };
 }

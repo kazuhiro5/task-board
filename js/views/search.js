@@ -42,15 +42,19 @@ export function renderSearch(container, tasks, opts) {
   opts.setContext({});
   if (!input) {
     input = h('input', {
-      type: 'search', class: 'tb-search', placeholder: 'タスクを探す', 'aria-label': 'タスクを探す', enterkeyhint: 'search', autocomplete: 'off',
+      type: 'search', class: 'add-title tb-search', placeholder: 'タスクを探す', 'aria-label': 'タスクを探す', enterkeyhint: 'search', autocomplete: 'off',
     });
   }
   input.value = query;
   const box = h('div', { class: 'tb-search-results' }, resultBox(tasks));
   input.oninput = () => { query = input.value; box.replaceChildren(resultBox(tasks)); };
+  // タスクの入力欄と同じ場所・同じ形にし、ボタンだけオレンジにして「追加」と見分ける
+  const form = h('form', { class: 'add-form tb-search-form', role: 'search', autocomplete: 'off' },
+    h('div', { class: 'add-line' }, input, h('button', { type: 'submit', class: 'primary tb-search-go' }, '検索')));
+  form.addEventListener('submit', (ev) => { ev.preventDefault(); query = input.value; box.replaceChildren(resultBox(tasks)); input.blur(); });
   const hadFocus = document.activeElement === input;
   const [s, e] = [input.selectionStart, input.selectionEnd];
-  container.replaceChildren(h('div', { class: 'tb-search-view' }, input, box));
+  container.replaceChildren(h('div', { class: 'tb-search-view' }, form, box));
   if (hadFocus) { input.focus(); try { input.setSelectionRange(s, e); } catch { /* 選べない時はそのまま */ } }
 }
 

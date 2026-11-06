@@ -1,8 +1,8 @@
 // 画面「用途管理」「プロジェクト管理」（⋯メニューから開く）。用途・プロジェクトの削除はここからだけ。
 // 消し方は card.js の areaMenuItems／projectMenuItems と同じ（2回押し・元に戻す付き）。
 // 左の一覧の横に置かないのは、押し間違えた時の影響が大きいため。
-import { areaNames, areaColor, projectNames, getTasks } from '../store.js';
-import { h, areaMenuItems, projectMenuItems } from './card.js';
+import { areaNames, areaColor, projectNames, getTasks, addArea, addProject } from '../store.js';
+import { h, areaMenuItems, projectMenuItems, inlineAdder } from './card.js';
 
 function row(name, dot, info, items, rerender) {
   return h('li', { class: 'tb-manage-row' },
@@ -41,7 +41,8 @@ export function renderManageAreas(container, _tasks, opts) {
         if (c) dot.style.background = c;
         return row(a, dot, `タスク${n.get(a) || 0}件`, areaMenuItems(a).map((it) => ({ ...it, short: '削除' })), opts.rerender);
       }))
-      : h('p', { class: 'tb-empty' }, '用途はありません')));
+      : h('p', { class: 'tb-empty' }, '用途はありません'),
+    inlineAdder('manage-area', { label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: addArea, rerender: opts.rerender })));
 }
 
 export function renderManageProjects(container, _tasks, opts) {
@@ -56,5 +57,6 @@ export function renderManageProjects(container, _tasks, opts) {
         const shorts = items.length === 1 ? ['削除'] : ['プロジェクトだけ削除', 'タスクもゴミ箱へ'];
         return row(p, null, `タスク${n.get(p) || 0}件`, items.map((it, i) => ({ ...it, short: shorts[i] })), opts.rerender);
       }))
-      : h('p', { class: 'tb-empty' }, 'プロジェクトはありません')));
+      : h('p', { class: 'tb-empty' }, 'プロジェクトはありません'),
+    inlineAdder('manage-project', { label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: addProject, rerender: opts.rerender })));
 }
