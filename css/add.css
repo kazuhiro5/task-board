@@ -114,8 +114,8 @@
 }
 @media (min-width: 840px) {
   .add { margin-top: 4px; }
-  /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅） */
-  .add.is-open .add-form {
+  /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅）。リンク集の入力欄（#linkAdd）は上のまま開く */
+  #add.is-open .add-form {
     position: fixed; inset: 0 0 0 auto; z-index: 30;
     width: var(--detail-w); max-width: 100vw; height: 100dvh;
     align-content: start; gap: 10px; overflow-y: auto; overscroll-behavior: contain;
@@ -123,14 +123,14 @@
     border: 0; border-left: 1px solid var(--line); border-radius: 0;
     box-shadow: -6px 0 18px rgb(0 0 0 / .06);
   }
-  .add.is-open .add-head {
+  #add.is-open .add-head {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
     margin: 0 -16px 4px; padding: 0 16px 10px; border-bottom: 1px solid var(--line);
   }
   .add-heading { font-size: 17px; font-weight: 600; }
   /* 入力欄が右へ移った後の元の場所。空白のままだと壊れて見えるので、どこで入力しているかを出す */
-  .add.is-open { display: grid; }
-  .add.is-open::before {
+  #add.is-open { display: grid; }
+  #add.is-open::before {
     content: '右のパネルで入力中'; display: grid; place-items: center;
     border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: 13px;
   }
@@ -139,7 +139,7 @@
 }
 @media (min-width: 840px) and (max-width: 1099px) {
   body.has-add #appRoot { padding-right: 16px; }
-  .add.is-open .add-form { box-shadow: -10px 0 30px rgb(0 0 0 / .22); }
+  #add.is-open .add-form { box-shadow: -10px 0 30px rgb(0 0 0 / .22); }
 }
 
 /* ---- 編集画面 ---- */

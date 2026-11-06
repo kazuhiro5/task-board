@@ -12,6 +12,7 @@
 // 閉じたら、開いた元のカードにフォーカスを戻す。
 import { updateTask, deleteTask, restoreTask, projectNames, getPhases, areaNames } from './store.js';
 import { showToast } from './toast.js';
+import { todayKey, addDays } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 
@@ -166,6 +167,14 @@ function getDialog() {
     e.preventDefault();
     closeEdit();
   });
+  // パネル（PC）は、パネルの外を押したら閉じる。直した所があれば保存してから（「保存」を押したのと同じ）。
+  // 閉じるボタンや Esc を毎回押すのが手間なため。名前が空なら閉じずにエラーを出す（保存の処理がする）
+  document.addEventListener('pointerdown', (e) => {
+    if (!isPanel() || dialog.contains(e.target) || e.target.closest?.('.toast')) return;
+    const form = dialog.querySelector('form');
+    if (form) form.requestSubmit(); else closeEdit();
+  }, true);
+
   // 幅が変わったら（iPad の回転など）形を切り替える
   wideMq = window.matchMedia(WIDE);
   wideMq.addEventListener('change', () => {
@@ -206,13 +215,25 @@ export function openEdit(task) {
   }
 
   // 日付（date入力＋なし）
-  function dateControl(key, label) {
+  // quick：カレンダーを開かずに押せる日（やる日だけ「今日」「明日」。よく使う書き換えのため）
+  function dateControl(key, label, quick = []) {
     const input = el('input', { type: 'date', class: 'tag-date', 'aria-label': label });
     input.value = v[key] || '';
     const none = chip('なし', !v[key], () => { v[key] = null; input.value = ''; sync(); });
-    function sync() { none.classList.toggle('is-on', !v[key]); none.setAttribute('aria-pressed', String(!v[key])); }
+    const quickChips = quick.map(([l, day]) => {
+      const c = chip(l, v[key] === day, () => { v[key] = day; input.value = day; sync(); });
+      c.dataset.day = day;
+      return c;
+    });
+    function sync() {
+      for (const c of [none, ...quickChips]) {
+        const on = c === none ? !v[key] : v[key] === c.dataset.day;
+        c.classList.toggle('is-on', on);
+        c.setAttribute('aria-pressed', String(on));
+      }
+    }
     input.addEventListener('change', () => { v[key] = input.value || null; sync(); });
-    return [input, none];
+    return [input, ...quickChips, none];
   }
 
   // チップ1行（もう一度押すと解除）
@@ -308,7 +329,8 @@ export function openEdit(task) {
   renderStatus();
   renderProj();
   renderPhase();
-  const [doIn, doNone] = dateControl('doDate', 'やる日');
+  const t = todayKey();
+  const doCtl = dateControl('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)]]);
   const [dueIn, dueNone] = dateControl('dueDate', '締切');
 
   // 上（見出し・閉じる）／中（項目。ここだけ流れる）／下（保存。いつも見える）
@@ -320,7 +342,7 @@ export function openEdit(task) {
     el('div', { class: 'edit-body' }, [
       field('タスク名', [titleInput]),
       field('状態', [statusBox]),
-      field('やる日', [el('div', { class: 'edit-date' }, [doIn, doNone])]),
+      field('やる日', [el('div', { class: 'edit-date' }, doCtl)]),
       field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
       field('用途', [chipControl('area', areaNames())]),
       field('プロジェクト', [projInput, projChips]),
