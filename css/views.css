@@ -590,3 +590,9 @@
 .tb-list-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; }
 .tb-list-top > .tb-modes { margin: 0; flex: 0 1 460px; }
 .tb-today-top .tb-x { flex: none; }
+
+/* 今日の絞り込み：用途の色の丸を選ぶ欄の左に重ねる */
+.tb-filter-wrap { position: relative; display: inline-flex; min-width: 0; max-width: 60%; }
+.tb-filter-wrap > .tb-filter-select { max-width: 100%; }
+.tb-filter-wrap.has-dot > .tb-dot { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; pointer-events: none; }
+.tb-filter-wrap.has-dot > .tb-filter-select { padding-left: 32px; }
