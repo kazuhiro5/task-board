@@ -1,12 +1,13 @@
 // 画面「今日」＝今日から先の予定。担当：画面役。
 // renderToday(container, tasks, opts)：opts = { group, setGroup, setContext, rerender }
-// 上から 期限切れ → 今日（持ち越し含む） → 明日 → それ以降（日付ごと） → 進行中 → 受信箱 → 今日終えたもの。
+// 上から 期限切れ → 持ち越し → 今日 → 明日 → それ以降（日付ごと） → 進行中 → 受信箱 → 今日終えたもの。
 // 1つのタスクは上の区分の1か所だけに出す（設計書 6章）。
 // 「明日」より先は、やる日（doDate）があればその日、なければ締切（dueDate）の日に置く。
 // 引きずって動かす：「今日」「明日」「日付ごとの見出し」へ落とすと、やる日をその日に。同じ区分の中の上下は順番（order）。
 //   期限切れ・進行中・受信箱・今日終えたもの へは落とせない。受信箱・進行中からは引きずり出せる（期限切れは動かしても期限切れに残るので動かさない）
 // 上に「並び替え▼」（tb.sort.today）。各区分の中の並びにだけ効く。
 // 期限切れは「期限切れ N件 ▸」の1行だけ。押すと中身が伸びる（開いたかは tb.overdueOpen）。
+// 持ち越し（やる日が昨日以前で、締切は過ぎていない）も同じ形の1行（tb.carryOpen）。今日の区分に混ぜると今日やることが埋もれるため。
 //   中の上に一括ボタン「全部今日へ／全部明日へ／日付なしへ」（やる日と締切の両方を書き換える）。2回押し。
 //   書いた直後に「◯件を動かしました・元に戻す」（元のやる日・締切に戻す）。
 import { todayKey, toKey, addDays, label } from '../dates.js';
@@ -23,6 +24,32 @@ let doneOpen = false; // 「今日終えたもの」を開いているか
 let showFar = false; // 15日先以降も出しているか
 let armed = null; // 一括ボタンを1回押した：'today' | 'tomorrow' | 'none'
 let armTimer = 0;
+
+function loadFlag(k) {
+  try { return localStorage.getItem(k) === '1'; } catch { return false; }
+}
+function saveFlag(k, v) {
+  try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* 保存できなくても動く */ }
+}
+
+// 持ち越し：畳んだ1行＋中身（期限切れと同じ見た目。一括ボタンは無し。今日・明日へ引きずって動かせる）
+function carryBox(list, opts) {
+  if (!list.length) return null;
+  const open = loadFlag('tb.carryOpen');
+  const head = h('h2', { class: 'tb-od-head' },
+    h('button', {
+      type: 'button', class: 'tb-od-btn tb-carry-btn', 'aria-expanded': String(open), 'aria-controls': 'tb-carry-body',
+      onclick: () => { saveFlag('tb.carryOpen', !open); opts.rerender(); },
+    },
+    h('span', { class: 'tb-od-title' }, '持ち越し'),
+    h('span', { class: 'tb-od-n' }, `${list.length}件`),
+    h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸')));
+  if (!open) return h('section', { class: 'tb-sec tb-od tb-carry', 'data-sec': 'carry' }, head);
+  return h('section', { class: 'tb-sec tb-od tb-carry is-open', 'data-sec': 'carry', 'data-drop': 'carry', 'data-drop-ok': false },
+    head,
+    h('div', { class: 'tb-od-body', id: 'tb-carry-body' },
+      h('div', { class: 'tb-cards' }, list.map((x) => taskCard(x, { badges: ['持ち越し'] })))));
+}
 
 function loadOverdueOpen() {
   try { return localStorage.getItem('tb.overdueOpen') === '1'; } catch { return false; }
@@ -141,6 +168,7 @@ export function renderToday(container, tasks, opts) {
     return list;
   };
   const overdue = take((x) => x.dueDate && x.dueDate < t);
+  const carry = take((x) => x.doDate && x.doDate < t && x.dueDate !== t);
   const today = take((x) => (x.doDate && x.doDate <= t) || x.dueDate === t);
   const tmr = take((x) => placeKey(x) === tomorrow);
   const later = take((x) => placeKey(x) > tomorrow);
@@ -209,6 +237,7 @@ export function renderToday(container, tasks, opts) {
     chips,
     filterBar,
     overdueBox(overdue, t, opts),
+    carryBox(carry, opts),
     section('今日', today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today' }, { drop: 'today' }),
     section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,

@@ -141,7 +141,7 @@
 @container tb (min-width: 950px) {
   /* Googleカレンダーの週表示のように7列 */
   .tb-days { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0; }
-  .tb-day { padding: 0 4px; border-left: 1px solid var(--line); min-height: 50vh; }
+  .tb-day { padding: 0 4px; border-left: 1px solid var(--line); min-height: 100vh; } /* 予定が無くても縦に長く取り、下へ流して見る */
   .tb-day:first-child { border-left: 0; }
   .tb-day.is-today { background: color-mix(in srgb, var(--accent-weak) 45%, transparent); border-radius: 8px; }
   .tb-day .tb-cards { gap: 4px; }
@@ -156,7 +156,8 @@
 /* 日付なしの帯：2行で横に流す。右端を少し見切らせて、続きがあることを見せる */
 .tb-strip { margin: 0 0 14px; min-width: 0; }
 .tb-strip-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
-.tb-strip-title { font-size: 13px; font-weight: 700; }
+.tb-strip.is-closed { margin: 0 0 10px; }
+.tb-strip-toggle { font-size: 13px; }
 .tb-strip-hint { font-size: 12px; color: var(--muted); margin-right: auto; }
 .tb-strip-arrow { min-width: var(--tap); padding: 0; font-size: 18px; }
 .tb-strip-cards.tb-cards {
@@ -432,6 +433,7 @@
 }
 .tb-od-btn:hover { border-color: var(--muted); }
 .tb-od-n { color: var(--danger); font-weight: 700; }
+.tb-carry .tb-od-n { color: var(--text); } /* 持ち越しは期限切れほど急がないので赤にしない */
 .tb-od-chev { margin-left: auto; font-size: 12px; }
 .tb-od-body { display: grid; gap: 8px; }
 .tb-od-bulk { display: flex; flex-wrap: wrap; gap: 6px; }

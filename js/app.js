@@ -135,7 +135,12 @@ function renderSide() {
   areas.appendChild(el('div', { class: 'side-label', text: '用途' }));
   // 用途ごとの未完了の件数（完了は数えない。一覧の用途タブの初期表示と同じ）
   const counts = new Map();
-  for (const t of store.getTasks()) if (t.area && t.status !== 'done') counts.set(t.area, (counts.get(t.area) || 0) + 1);
+  const pcounts = new Map(); // プロジェクトごとの未完了の件数（用途と同じ数え方）
+  for (const t of store.getTasks()) {
+    if (t.status === 'done') continue;
+    if (t.area) counts.set(t.area, (counts.get(t.area) || 0) + 1);
+    if (t.project) pcounts.set(t.project, (pcounts.get(t.project) || 0) + 1);
+  }
   for (const a of store.areaNames()) {
     const item = sideItem({
       active: state.view === 'list' && p.area === a,
@@ -163,6 +168,7 @@ function renderSide() {
       onclick: () => navigate('projects', { project: name }),
       html: icon('project'),
       label: name,
+      count: pcounts.get(name) || 0,
     }));
     projs.lastChild.dataset.name = name;
   }

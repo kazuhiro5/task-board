@@ -202,6 +202,8 @@ button { font: inherit; color: inherit; }
 }
 .side-item svg { flex: none; width: 18px; height: 18px; color: var(--muted); }
 .side-item span.side-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* プロジェクト名は「voice-taskmap」が入るくらいまで出し、それより長いと「…」（件数の位置をそろえるため） */
+.side-item span.side-name { max-width: 8.6em; }
 /* 用途の件数（右寄せ・控えめ） */
 .side-item .side-count { margin-left: auto; flex: none; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .side-item:hover { background: var(--surface); }

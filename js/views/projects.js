@@ -112,6 +112,7 @@ export function renderProjects(container, tasks, opts) {
       groupKey: 'phase',
       groupKeys: [],
       phases: getPhases(name),
+      project: name, // フェーズの名前（store の phaseName）とダブルクリックでの名前変更に使う
       // 確認は出さない。待たずに描き直す（store が端末内の数をすぐ増やす）。失敗だけ短く出す
       onAddPhase: () => {
         addPhase(name).catch((err) => {

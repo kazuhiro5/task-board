@@ -78,6 +78,23 @@ export function getPhases(project) {
   return Number.isInteger(n) && n >= 1 ? n : DEFAULT_PHASES;
 }
 
+// フェーズの名前（名前を付けていなければ「フェーズN」）
+export function phaseName(project, n) {
+  const v = projects.get(project)?.phaseNames?.[n];
+  return typeof v === 'string' && v.trim() ? v : `フェーズ${n}`;
+}
+
+// フェーズの名前を変える。空にすると「フェーズN」に戻る。
+// phaseNames は { 番号: 名前 } で持つ（merge で1つだけ書けるように。並びは番号のまま）
+export function renamePhase(project, n, raw) {
+  const name = String(raw || '').trim().slice(0, 30);
+  const cur = projects.get(project) || {};
+  const phaseNames = { ...(cur.phaseNames || {}), [n]: name };
+  projects = new Map(projects).set(project, { ...cur, phaseNames });
+  emit();
+  return backend.setProject(project, { name: project, phaseNames: { [n]: name }, updatedAt: Date.now() });
+}
+
 // フェーズを1つ足して保存する（待たなくてよい。端末内にはすぐ入る）
 export async function addPhase(project) {
   const name = project ? String(project).trim() : '';
@@ -389,7 +406,7 @@ async function firestoreBackend(uid) {
       const x = d.data();
       let name = x.name;
       if (!name) { try { name = decodeURIComponent(d.id); } catch { name = d.id; } }
-      m.set(name, { phases: x.phases, updatedAt: x.updatedAt || 0 });
+      m.set(name, { phases: x.phases, phaseNames: x.phaseNames || null, updatedAt: x.updatedAt || 0 });
     }
     projects = m;
     emit();
@@ -476,7 +493,7 @@ function demoBackend() {
     add: async (x) => { const id = `demo${++n}`; apply({ type: 'set', id, data: x }); emit(); return id; },
     update: async (id, p) => { apply({ type: 'update', id, data: p }); emit(); },
     batch: async (ops) => { for (const o of ops) apply(o); emit(); },
-    setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases, updatedAt: data.updatedAt }); emit(); },
+    setProject: async (name, data) => { const cur = projects.get(name) || {}; projects = new Map(projects).set(name, { ...cur, ...data, phaseNames: { ...(cur.phaseNames || {}), ...(data.phaseNames || {}) } }); emit(); },
     addAreas: async () => { emit(); },
     setMeta: async () => { emit(); },
     addLink: async (data) => { const id = `demoL${++n}`; setLinks([...links, { ...data, id }]); emit(); return id; },

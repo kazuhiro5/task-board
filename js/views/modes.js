@@ -5,12 +5,13 @@
 //   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
 //   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
-import { updateTask, areaNames } from '../store.js';
+import { updateTask, areaNames, phaseName, renamePhase } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot } from './card.js';
 import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
+import { showToast } from '../toast.js';
 
 // cfg.hide（例：プロジェクトの中では ['project']）を、すべての行に足す
 let extraHide = [];
@@ -75,7 +76,7 @@ function groupsFor(key, list, showDone, cfg = {}) {
     return {
       order: Array.from({ length: max }, (_, i) => i + 1),
       value: phaseOf,
-      label: (v) => `フェーズ${v}`,
+      label: (v) => (cfg.project ? phaseName(cfg.project, v) : `フェーズ${v}`),
       noneLabel: 'フェーズなし',
       keepEmpty: true,
     };
@@ -115,6 +116,44 @@ function ctxFor(key, v) {
 const idOf = (key, v) => `${key}:${v === NONE ? '' : v}`;
 const nameOf = (g, v) => (v === NONE ? (g.noneLabel || '未設定') : g.label(v));
 
+// フェーズの名前をダブルクリックで直す（プロジェクトの中だけ）。Enter・外を押すで保存、Esc でやめる
+function renamable(nameEl, cfg, key, v) {
+  if (key !== 'phase' || !cfg.project || v === NONE) return nameEl;
+  nameEl.title = 'ダブルクリックで名前を変える';
+  // dblclick は使えない：1回目の click で画面が描き直され、2回目は消えた要素に届くため。
+  // 2回目を押した瞬間（mousedown の detail＝2）に始め、その直後の click が親のボタンに届かないようにする
+  nameEl.addEventListener('mousedown', (e) => {
+    if (e.detail !== 2) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 400);
+    const input = h('input', { type: 'text', class: 'tb-rename', value: phaseName(cfg.project, v), maxlength: '30', 'aria-label': `フェーズ${v}の名前` });
+    let done = false;
+    const finish = (save) => {
+      if (done) return;
+      done = true;
+      if (save && input.value.trim() !== phaseName(cfg.project, v)) {
+        renamePhase(cfg.project, v, input.value).catch((err) => showToast(`名前を保存できませんでした（${err.message || err}）`));
+      }
+      cfg.rerender();
+    };
+    // 親のボタンの click（開く・選ぶ）に届かないようにする
+    for (const t of ['click', 'pointerdown', 'dblclick']) input.addEventListener(t, (ev) => ev.stopPropagation());
+    input.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+      if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+  });
+  return nameEl;
+}
+
 // 「＋ フェーズを追加」（cfg.onAddPhase がある時だけ）
 function addPhaseBtn(cfg, cls = '') {
   if (!cfg.onAddPhase) return null;
@@ -151,11 +190,13 @@ function listMode(tasks, cfg, s) {
 
   const sections = [...buckets.entries()].map(([v, items]) => {
     const isPicked = pickedV === v;
+    const head = sectionHead(nameOf(g, v), items.length, {
+      picked: isPicked,
+      onPick: () => { s.picked = isPicked ? null : idOf(key, v); cfg.rerender(); },
+    });
+    renamable(head.querySelector('.tb-sec-title'), cfg, key, v);
     return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v },
-      sectionHead(nameOf(g, v), items.length, {
-        picked: isPicked,
-        onPick: () => { s.picked = isPicked ? null : idOf(key, v); cfg.rerender(); },
-      }),
+      head,
       items.length ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] }))) : null);
   });
   return [groupBar(cfg, s),
@@ -183,15 +224,17 @@ function colsMode(tasks, cfg, s) {
       class: 'tb-cols-item' + (v === cur ? ' is-active' : '') + (buckets.get(v).length ? '' : ' is-empty'),
       'aria-pressed': String(v === cur),
       'data-group-value': v === NONE ? '' : v,
+      // 右のタスクを左のフェーズへ引きずって移す（プロジェクトの中だけ）
+      ...(key === 'phase' ? { 'data-drop': idOf(key, v), 'data-drop-ok': true } : {}),
       onclick: () => { s.colPick = idOf(key, v); s.colOpen = true; cfg.rerender(); },
     },
     key === 'area' && v !== NONE ? areaDot(v) : null,
-    h('span', { class: 'tb-cols-name' }, nameOf(g, v)),
+    renamable(h('span', { class: 'tb-cols-name' }, nameOf(g, v)), cfg, key, v),
     h('span', { class: 'tb-count' }, String(buckets.get(v).length)))),
     addPhaseBtn(cfg, 'tb-cols-add'));
 
   const items = cur !== null ? buckets.get(cur) : [];
-  const pane = h('section', { class: 'tb-cols-pane' },
+  const pane = h('section', { class: 'tb-cols-pane', ...(key === 'phase' && cur !== null ? { 'data-drop': idOf(key, cur), 'data-drop-ok': true } : {}) },
     h('div', { class: 'tb-cols-head' },
       h('button', { type: 'button', class: 'tb-btn tb-back tb-cols-back', onclick: () => { s.colOpen = false; cfg.rerender(); } }, '‹ 戻る'),
       h('h2', { class: 'tb-cols-title' }, cur !== null ? nameOf(g, cur) : ''),
@@ -200,10 +243,19 @@ function colsMode(tasks, cfg, s) {
       ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] })))
       : h('p', { class: 'tb-empty' }, 'タスクはありません'));
 
+  const cols = h('div', { class: 'tb-cols' + (s.colOpen ? ' is-open' : '') }, nav, pane);
+  if (key === 'phase') {
+    enableDrag(cols, {
+      rootSel: '.tb-cols',
+      onDrop: ({ id, fromKey, toKey }) => {
+        if (fromKey === toKey) return;
+        const v = toKey.slice('phase:'.length);
+        updateTask(id, { phase: v ? Number(v) : null }).catch((err) => showToast(`移せませんでした（${err.message || err}）`));
+      },
+    });
+  }
   return [groupBar(cfg, s),
-    values.length
-      ? h('div', { class: 'tb-cols' + (s.colOpen ? ' is-open' : '') }, nav, pane)
-      : h('p', { class: 'tb-empty' }, 'タスクはありません')];
+    values.length ? cols : h('p', { class: 'tb-empty' }, 'タスクはありません')];
 }
 
 // ---- カレンダー：月曜始まりの週の格子 ----

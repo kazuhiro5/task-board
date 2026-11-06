@@ -5,6 +5,7 @@
 // 「次の週」の横に「並び替え▼」（tb.sort.week）。日の中の並びにだけ効く。
 // 上に「日付なし」（やる日の無い未完了）を2行の帯で並べ、横に流す。日の列へ引きずるとやる日が入る。
 //   帯へは落とせない（日付を消すのは編集で）。件数が多い時は「すべて表示」で折り返して全部出す。
+//   ふだんは「日付なし N件 ▸」のボタンだけ（帯が出ていると、週の予定より先に目に入るため）。
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard, md } from './card.js';
 import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
@@ -12,19 +13,24 @@ import { enableDrag, dayDrag } from './dnd.js';
 
 let weekOffset = 0; // 0＝今週、-1＝前の週、1＝次の週
 let pickedDay = null; // 見出しを押して「ここに追加」にした日
+let stripOpen = false; // 日付なしを開いているか（ふだんは閉じて、週の予定を先に見せる）
 let stripAll = false; // 日付なしの帯を折り返して全部出しているか
 
 // 日付なしの帯。PCのマウスでは横に流しにくいので、左右の送りボタンを付ける
 function noDateStrip(tasks, cmp, opts) {
   const items = tasks.filter((x) => isOpen(x) && !x.doDate).sort(cmp);
   if (!items.length) return null;
+  const toggle = h('button', {
+    type: 'button', class: 'tb-btn tb-strip-toggle' + (stripOpen ? ' is-active' : ''), 'aria-expanded': String(stripOpen),
+    onclick: () => { stripOpen = !stripOpen; opts.rerender(); },
+  }, `日付なし ${items.length}件 ${stripOpen ? '▾' : '▸'}`);
+  if (!stripOpen) return h('div', { class: 'tb-strip is-closed' }, toggle);
   const scroller = h('div', { class: 'tb-strip-cards tb-cards' + (stripAll ? ' is-all' : '') },
     items.map((x) => taskCard(x, { hide: ['doDate'] })));
   const step = (dir) => scroller.scrollBy({ left: dir * scroller.clientWidth * 0.8, behavior: 'smooth' });
   return h('section', { class: 'tb-strip', 'data-drop': 'nodate', 'aria-label': '日付なし' },
     h('div', { class: 'tb-strip-head' },
-      h('span', { class: 'tb-strip-title' }, '日付なし'),
-      h('span', { class: 'tb-count' }, String(items.length)),
+      toggle,
       h('span', { class: 'tb-strip-hint' }, '日の列へ引きずると、やる日が入ります'),
       stripAll ? null : h('button', { type: 'button', class: 'tb-btn tb-strip-arrow', 'aria-label': '左へ', onclick: () => step(-1) }, '‹'),
       stripAll ? null : h('button', { type: 'button', class: 'tb-btn tb-strip-arrow', 'aria-label': '右へ', onclick: () => step(1) }, '›'),
