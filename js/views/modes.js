@@ -5,10 +5,10 @@
 //   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
 //   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
-import { updateTask, areaNames, phaseName, renamePhase } from '../store.js';
+import { updateTask, areaNames, phaseName, renamePhase, deletePhase } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
-import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot } from './card.js';
+import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot, moreMenu } from './card.js';
 import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
 import { showToast } from '../toast.js';
@@ -129,6 +129,11 @@ function renamable(nameEl, cfg, key, v) {
     const swallow = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
     window.addEventListener('click', swallow, { capture: true, once: true });
     setTimeout(() => window.removeEventListener('click', swallow, { capture: true }), 400);
+    start();
+  });
+  // 「…」のメニューの「名前を変える」からも呼ぶ
+  nameEl.startRename = () => start();
+  function start() {
     const input = h('input', { type: 'text', class: 'tb-rename', value: phaseName(cfg.project, v), maxlength: '30', 'aria-label': `フェーズ${v}の名前` });
     let done = false;
     const finish = (save) => {
@@ -150,8 +155,29 @@ function renamable(nameEl, cfg, key, v) {
     nameEl.replaceWith(input);
     input.focus();
     input.select();
-  });
+  }
   return nameEl;
+}
+
+// フェーズの「…」：名前を変える／削除（中のタスクはフェーズなしへ。後ろのフェーズは1つ詰める）
+function phaseMenu(cfg, key, v, nameEl, tasks) {
+  if (key !== 'phase' || !cfg.project || v === NONE) return null;
+  const n = tasks.filter((x) => x.phase === v).length;
+  return moreMenu(`${phaseName(cfg.project, v)}のメニュー`, () => [
+    { label: '名前を変える', onSelect: () => nameEl.startRename?.() },
+    {
+      label: 'フェーズを削除', danger: true,
+      confirm: n ? `もう一度押すと削除（${n}件はフェーズなしへ）` : 'もう一度押すと削除',
+      onSelect: () => {
+        const label = phaseName(cfg.project, v);
+        const r = deletePhase(cfg.project, v);
+        const fail = (err) => showToast(`フェーズを削除できませんでした（${err.message || err}）`);
+        r.write.catch(fail);
+        showToast(`「${label}」を削除しました${r.moved ? `（${r.moved}件はフェーズなし）` : ''}`, { action: '元に戻す', onAction: () => r.undo().catch(fail) });
+        cfg.rerender();
+      },
+    },
+  ], 'tb-phase-more');
 }
 
 // 「＋ フェーズを追加」（cfg.onAddPhase がある時だけ）
@@ -194,7 +220,8 @@ function listMode(tasks, cfg, s) {
       picked: isPicked,
       onPick: () => { s.picked = isPicked ? null : idOf(key, v); cfg.rerender(); },
     });
-    renamable(head.querySelector('.tb-sec-title'), cfg, key, v);
+    const menu = phaseMenu(cfg, key, v, renamable(head.querySelector('.tb-sec-title'), cfg, key, v), tasks);
+    if (menu) head.append(menu);
     return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v },
       head,
       items.length ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] }))) : null);
@@ -210,6 +237,11 @@ function colsMode(tasks, cfg, s) {
   const list = s.showDone ? tasks : tasks.filter(isOpen);
   const { g, buckets } = bucketize(key, list, s.showDone, cfg.compact, cfg);
   const values = [...buckets.keys()];
+  // フェーズの行は「…」を横に並べる（ボタンの中にボタンは置けないため、行で包む）
+  const colsRow = (v, btn) => {
+    const menu = phaseMenu(cfg, key, v, btn.querySelector('.tb-cols-name'), tasks);
+    return menu ? h('div', { class: 'tb-cols-row' }, btn, menu) : btn;
+  };
   let cur = values.find((v) => idOf(key, v) === s.colPick) ?? null;
   if (cur === null) {
     // 最初はタスクのある最初のグループ
@@ -219,7 +251,7 @@ function colsMode(tasks, cfg, s) {
   cfg.setContext({ ...cfg.baseCtx, ...(cur !== null ? ctxFor(key, cur) : {}) });
 
   const nav = h('nav', { class: 'tb-cols-nav', 'aria-label': 'グループ' },
-    values.map((v) => h('button', {
+    values.map((v) => colsRow(v, h('button', {
       type: 'button',
       class: 'tb-cols-item' + (v === cur ? ' is-active' : '') + (buckets.get(v).length ? '' : ' is-empty'),
       'aria-pressed': String(v === cur),
@@ -230,7 +262,7 @@ function colsMode(tasks, cfg, s) {
     },
     key === 'area' && v !== NONE ? areaDot(v) : null,
     renamable(h('span', { class: 'tb-cols-name' }, nameOf(g, v)), cfg, key, v),
-    h('span', { class: 'tb-count' }, String(buckets.get(v).length)))),
+    h('span', { class: 'tb-count' }, String(buckets.get(v).length))))),
     addPhaseBtn(cfg, 'tb-cols-add'));
 
   const items = cur !== null ? buckets.get(cur) : [];

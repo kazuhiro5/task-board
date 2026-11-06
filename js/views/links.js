@@ -4,7 +4,8 @@
 //   「編集」で名前・URL・用途を直す・消す（消すは2回押し。ゴミ箱には入れない）。
 // mountLinkAdd(container)：リンク集の時だけ、タスクの入力欄の代わりに出す「リンクを追加」の入力欄。
 //   見た目と開き方はタスクの入力欄（add.js）と同じ（1行目＝名前＋追加。押すと URL・用途の行が開く）。
-import { getLinks, addLink, updateLink, deleteLink, areaNames, subscribe } from '../store.js';
+import { getLinks, addLink, updateLink, deleteLink, areaNames, subscribe, reorderLinks } from '../store.js';
+import { enableDrag } from './dnd.js';
 import { h, areaDot } from './card.js';
 import { showToast } from '../toast.js';
 
@@ -168,7 +169,9 @@ function editForm(x, rerender) {
 
 function linkRow(x, rerender) {
   if (ed.id === x.id) return h('li', { class: 'tb-link-item is-editing' }, editForm(x, rerender));
-  return h('li', { class: 'tb-link-item' },
+  // tb-card・tb-body は引きずり（dnd.js）が「動かせる行」「つかむ所」を見分ける印。つかむのは左の ⠿ だけ（リンクを押すと開くため）
+  return h('li', { class: 'tb-link-item tb-card', 'data-id': x.id },
+    h('button', { type: 'button', class: 'tb-body tb-link-grip', 'aria-label': `${label(x)}を並べ替え（引きずる）`, title: '引きずって並べ替え' }, '⠿'),
     h('a', { class: 'tb-link', href: x.url, target: '_blank', rel: 'noopener noreferrer' },
       h('span', { class: 'tb-link-name' }, label(x)),
       x.name ? h('span', { class: 'tb-link-host' }, host(x.url)) : null,
@@ -201,10 +204,19 @@ export function renderLinks(container, _tasks, opts) {
       h('h2', { class: 'tb-link-head' },
         area ? areaDot(area) : null, h('span', {}, area || NONE_LABEL),
         h('span', { class: 'tb-link-count', 'aria-label': `${items.length}件` }, String(items.length))),
-      h('ul', { class: 'tb-link-list' }, items.map((x) => linkRow(x, rerender)))));
+      // 引きずって並べ替える（別の用途の中へ落とすと用途も変わる）。落とす先の名前＝'link:用途'（用途なし＝'link:'）
+      h('ul', { class: 'tb-link-list', 'data-drop': `link:${area || ''}`, 'data-drop-ok': true }, items.map((x) => linkRow(x, rerender)))));
 
-  container.replaceChildren(h('div', { class: 'tb-links' },
+  const root = h('div', { class: 'tb-links' },
     sections.length
-      ? [h('p', { class: 'tb-empty' }, '押すと新しいタブで開きます'), h('div', { class: 'tb-groups' }, sections)]
-      : h('p', { class: 'tb-empty tb-guide' }, 'リンクはまだありません。「リンクを追加」から足せます')));
+      ? [h('p', { class: 'tb-empty' }, '押すと新しいタブで開きます。左の ⠿ を引きずると並べ替えられます'), h('div', { class: 'tb-groups' }, sections)]
+      : h('p', { class: 'tb-empty tb-guide' }, 'リンクはまだありません。「リンクを追加」から足せます'));
+  enableDrag(root, {
+    rootSel: '.tb-links',
+    onDrop: ({ toKey, finalIds }) => {
+      const area = toKey.slice('link:'.length) || null;
+      reorderLinks(area, finalIds).catch(fail('並べ替えを保存できませんでした'));
+    },
+  });
+  container.replaceChildren(root);
 }

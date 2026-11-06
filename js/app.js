@@ -8,12 +8,13 @@
 //   画面は render(container, tasks, opts) の opts.params で受け取る（params は保存しない。再読み込みで {} に戻る）
 import * as store from './store.js';
 import { mountAdd } from './add.js';
-import { inlineAdder } from './views/card.js';
+import { inlineAdder, moreMenu, areaMenuItems, projectMenuItems } from './views/card.js';
 import { renderToday } from './views/today.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
 import { renderTrash } from './views/trash.js';
+import { renderSearch, focusSearch } from './views/search.js';
 import { renderLinks, mountLinkAdd } from './views/links.js';
 import { writeBackup, lastBackupLabel } from './backup.js';
 
@@ -26,6 +27,7 @@ const ICONS = {
   project: '<path d="M4 6h16M4 12h10M4 18h7"/>',
   sideClose: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>',
   sideOpen: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
   links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 };
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`;
@@ -38,7 +40,7 @@ const VIEWS = {
   links: { label: 'リンク集', render: renderLinks },
 };
 // タブ・左の一覧に出さない画面（⋯メニューから開く）。開いた画面としては保存しない
-const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash } };
+const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash }, search: { label: '検索', render: renderSearch } };
 
 // 用途の一覧と色は store の areaNames()／areaColor()（Firestore の meta/areas。足した用途も含む）
 const SIDE_PROJECTS = 8; // 左の一覧に出すプロジェクトの数（最近触った順）
@@ -110,6 +112,14 @@ function renderTabbar() {
   }));
 }
 
+// 用途・プロジェクトの行：押す所（.side-item）と「…」を横に並べる（並べ替えはこの行ごと）
+function sideRow(name, item, menu) {
+  const row = el('div', { class: 'side-row' });
+  row.dataset.name = name;
+  row.append(item, menu);
+  return row;
+}
+
 function sideItem({ active, onclick, html, label, count }) {
   const b = el('button', {
     type: 'button', class: 'side-item' + (active ? ' is-active' : ''), 'aria-current': active ? 'page' : null, onclick,
@@ -149,10 +159,9 @@ function renderSide() {
       label: a,
       count: counts.get(a) || 0,
     });
-    item.dataset.name = a;
     const c = store.areaColor(a);
     if (c) item.querySelector('.cat-dot').style.background = c;
-    areas.appendChild(item);
+    areas.appendChild(sideRow(a, item, moreMenu(`${a}のメニュー`, () => areaMenuItems(a))));
   }
   areas.appendChild(inlineAdder('side-area', {
     label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: store.addArea, rerender: render,
@@ -163,14 +172,16 @@ function renderSide() {
   const names = store.projectNames().slice(0, SIDE_PROJECTS);
   if (!names.length) projs.appendChild(el('div', { class: 'side-empty', text: 'まだありません' }));
   for (const name of names) {
-    projs.appendChild(sideItem({
+    const item = sideItem({
       active: state.view === 'projects' && p.project === name,
       onclick: () => navigate('projects', { project: name }),
       html: icon('project'),
       label: name,
       count: pcounts.get(name) || 0,
-    }));
-    projs.lastChild.dataset.name = name;
+    });
+    // 開いているプロジェクトを消したら、プロジェクトの一覧へ戻る
+    const after = () => { if (state.view === 'projects' && state.params.project === name) navigate('projects', {}); };
+    projs.appendChild(sideRow(name, item, moreMenu(`${name}のメニュー`, () => projectMenuItems(name, after))));
   }
   projs.appendChild(inlineAdder('side-project', {
     label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: store.addProject, rerender: render,
@@ -202,7 +213,7 @@ function renderSide() {
 // 標準の draggable で足りる（スマホの指には効かないが、スマホに左の一覧は無い）
 let sideDragging = false; // 引きずっている間は左の一覧を描き直さない（つかんだ要素が消えるため）
 function sortable(sec, onDone) {
-  const items = () => [...sec.querySelectorAll('.side-item[data-name]')];
+  const items = () => [...sec.querySelectorAll('.side-row[data-name]')];
   const before = items().map((x) => x.dataset.name).join('|');
   for (const it of items()) {
     it.draggable = true;
@@ -321,6 +332,19 @@ $('#backupBtn').addEventListener('click', async () => {
   if (d) d.open = false;
   await writeBackup();
   showBackupLast();
+});
+
+// 上の虫めがね・「/」キー（打っている途中でない時）で検索を開く
+function openSearch() { navigate('search', {}); focusSearch(); }
+$('#searchBtn').insertAdjacentHTML('afterbegin', icon('search'));
+$('#searchBtn').addEventListener('click', openSearch);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target;
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if ($('#appRoot').hidden) return;
+  e.preventDefault();
+  openSearch();
 });
 
 // ⋯メニューの「ゴミ箱」

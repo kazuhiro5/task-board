@@ -193,8 +193,30 @@ export function deleteLink(id) {
   return backend.deleteLink(id);
 }
 
+// 並びは order（引きずって決めた順。0,1,2…）→ 無ければ足した時刻。order の無いもの（後から足したもの）は下に出る
+const linkKey = (x) => (Number.isFinite(x.order) ? x.order : (x.createdAt || 0));
 function setLinks(list) {
-  links = list.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+  links = list.slice().sort((a, b) => linkKey(a) - linkKey(b));
+}
+
+// リンクを引きずって並べ替えた時。ids＝落とした用途の中の新しい順。area＝その用途（null＝用途なし）。
+// 別の用途から来たリンクは用途も書き換える。順番が変わったものだけ書く
+export function reorderLinks(area, ids) {
+  const byId = new Map(links.map((x) => [x.id, x]));
+  const writes = [];
+  ids.forEach((id, i) => {
+    const x = byId.get(id);
+    if (!x) return;
+    const patch = {};
+    if (x.order !== i) patch.order = i;
+    if ((x.area || null) !== area) patch.area = area;
+    if (Object.keys(patch).length) writes.push([id, patch]);
+  });
+  if (!writes.length) return Promise.resolve();
+  const map = new Map(writes);
+  setLinks(links.map((x) => (map.has(x.id) ? { ...x, ...map.get(x.id) } : x)));
+  emit();
+  return Promise.all(writes.map(([id, patch]) => backend.updateLink(id, { ...patch, updatedAt: Date.now() })));
 }
 
 // プロジェクトを作る（タスク0件でも一覧に出す）。同じ名前は作らない。addArea と同じくその場で Error を投げる
@@ -361,6 +383,95 @@ export async function purgeTask(id) {
 
 // 何件もまとめて書き換える。entries = [{ id, patch }]。Firestore は writeBatch で BATCH_MAX 件ごとに分ける。
 // 端末内にはすぐ入る（オフラインだと Promise は終わらないので、画面は待たない）
+// ---- 分類（フェーズ・用途・プロジェクト）を消す ----
+// 中のタスクは消さず、その分類を外す（プロジェクトだけは「タスクもゴミ箱へ」も選べる）。
+// どれも「元に戻す」のための関数を返す（呼ぶと消す前の形に書き戻す）
+
+// フェーズ n を消す：n のタスクはフェーズなし、n より後ろのフェーズは1つずつ前へ詰める（名前も一緒に）
+export function deletePhase(project, n) {
+  const cur = projects.get(project) || {};
+  const count = getPhases(project);
+  const inside = allTasks.filter((x) => x.project === project && Number.isInteger(x.phase) && x.phase >= n);
+  const before = inside.map((x) => ({ id: x.id, patch: { phase: x.phase } }));
+  const oldNames = {};
+  const newNames = {};
+  for (let i = 1; i <= count + 1; i++) {
+    oldNames[i] = cur.phaseNames?.[i] || '';
+    if (i >= n) newNames[i] = cur.phaseNames?.[i + 1] || ''; // 空＝「フェーズN」（merge で古い名前が残らないよう全部書く）
+  }
+  const phases = Math.max(1, count - 1);
+  projects = new Map(projects).set(project, { ...cur, phases, phaseNames: { ...(cur.phaseNames || {}), ...newNames } });
+  emit();
+  const write = Promise.all([
+    updateMany(inside.map((x) => ({ id: x.id, patch: { phase: x.phase === n ? null : x.phase - 1 } }))),
+    backend.setProject(project, { name: project, phases, phaseNames: newNames, updatedAt: Date.now() }),
+  ]);
+  const undo = () => {
+    projects = new Map(projects).set(project, { ...(projects.get(project) || {}), phases: count, phaseNames: oldNames });
+    emit();
+    return Promise.all([
+      updateMany(before),
+      backend.setProject(project, { name: project, phases: count, phaseNames: oldNames, updatedAt: Date.now() }),
+    ]);
+  };
+  return { write, undo, moved: inside.filter((x) => x.phase === n).length };
+}
+
+// 用途を消す：タスクとリンクの用途を外し、一覧から除く
+export function deleteArea(name) {
+  const oldList = getAreas();
+  const list = oldList.filter((a) => a.name !== name);
+  const ts = allTasks.filter((x) => x.area === name);
+  const ls = links.filter((x) => x.area === name);
+  areaList = list;
+  emit();
+  const write = Promise.all([
+    backend.setMeta({ list }),
+    updateMany(ts.map((x) => ({ id: x.id, patch: { area: null } }))),
+    ...ls.map((x) => backend.updateLink(x.id, { area: null })),
+  ]);
+  const undo = () => {
+    areaList = oldList;
+    emit();
+    return Promise.all([
+      backend.setMeta({ list: oldList }),
+      updateMany(ts.map((x) => ({ id: x.id, patch: { area: name } }))),
+      ...ls.map((x) => backend.updateLink(x.id, { area: name })),
+    ]);
+  };
+  return { write, undo, count: ts.filter((x) => !x.deletedAt).length };
+}
+
+// プロジェクトを消す。withTasks＝true ならタスクもゴミ箱へ、false ならタスクからプロジェクトとフェーズを外す
+export function deleteProject(name, withTasks) {
+  const saved = projects.get(name) || null;
+  const ts = allTasks.filter((x) => x.project === name && !x.deletedAt);
+  const oldOrder = projectOrder;
+  const m = new Map(projects);
+  m.delete(name);
+  projects = m;
+  projectOrder = projectOrder.filter((n) => n !== name);
+  const now = Date.now();
+  const patch = withTasks ? { deletedAt: now } : { project: null, phase: null };
+  const write = Promise.all([
+    updateMany(ts.map((x) => ({ id: x.id, patch }))),
+    backend.deleteProject(name),
+    oldOrder.includes(name) ? backend.setMeta({ projectOrder }) : null,
+  ]);
+  const undo = () => {
+    if (saved) projects = new Map(projects).set(name, saved);
+    projectOrder = oldOrder;
+    emit();
+    return Promise.all([
+      updateMany(ts.map((x) => ({ id: x.id, patch: withTasks ? { deletedAt: null } : { project: name, phase: x.phase ?? null } }))),
+      saved ? backend.setProject(name, { name, phases: saved.phases ?? DEFAULT_PHASES, phaseNames: saved.phaseNames || {}, updatedAt: Date.now() }) : null,
+      oldOrder.includes(name) ? backend.setMeta({ projectOrder: oldOrder }) : null,
+    ]);
+  };
+  emit();
+  return { write, undo, count: ts.length };
+}
+
 export async function updateMany(entries) {
   const now = Date.now();
   return backend.batch(entries.map(({ id, patch }) => ({ type: 'update', id, data: { ...patch, updatedAt: now } })));
@@ -447,6 +558,7 @@ async function firestoreBackend(uid) {
     addAreas: (items) => setDoc(areasRef, { list: arrayUnion(...items), updatedAt: Date.now() }, { merge: true }),
     // 並べ替えは並び全体を書く（順番は arrayUnion では表せないため）
     setMeta: (patch) => setDoc(areasRef, { ...patch, updatedAt: Date.now() }, { merge: true }),
+    deleteProject: (name) => deleteDoc(doc(pcol, projectDocId(name))),
     addLink: (data) => addDoc(lcol, data).then((r) => r.id),
     updateLink: (id, data) => updateDoc(doc(lcol, id), data),
     deleteLink: (id) => deleteDoc(doc(lcol, id)),
@@ -496,6 +608,7 @@ function demoBackend() {
     setProject: async (name, data) => { const cur = projects.get(name) || {}; projects = new Map(projects).set(name, { ...cur, ...data, phaseNames: { ...(cur.phaseNames || {}), ...(data.phaseNames || {}) } }); emit(); },
     addAreas: async () => { emit(); },
     setMeta: async () => { emit(); },
+    deleteProject: async () => { emit(); },
     addLink: async (data) => { const id = `demoL${++n}`; setLinks([...links, { ...data, id }]); emit(); return id; },
     updateLink: async (id, data) => { setLinks(links.map((x) => (x.id === id ? { ...x, ...data } : x))); emit(); },
     deleteLink: async (id) => { setLinks(links.filter((x) => x.id !== id)); emit(); },

@@ -121,6 +121,12 @@ button { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 8px; padding: 6px 0;
 }
 .top-title { flex: 1; min-width: 0; margin: 0; font-size: 18px; font-weight: 600; }
+.top-btn {
+  display: grid; place-items: center; min-width: var(--tap); min-height: var(--tap); padding: 0;
+  border: 0; border-radius: var(--radius-s); background: none; color: var(--muted); cursor: pointer;
+}
+.top-btn svg { width: 20px; height: 20px; }
+.top-btn:hover { background: var(--surface); color: var(--text); }
 
 .user { position: relative; }
 .user summary {
@@ -213,8 +219,15 @@ button { font: inherit; color: inherit; }
 .side-item.is-active { background: var(--accent-weak); color: var(--text); font-weight: 600; }
 .side-item.is-active svg { color: var(--accent); }
 .side-empty { font-size: 13px; color: var(--muted); padding: 0 10px; }
-.side-item[draggable="true"] { cursor: grab; }
-.side-item.is-dragging { opacity: .5; background: var(--accent-weak); }
+.side-row { display: flex; align-items: center; min-width: 0; border-radius: var(--radius-s); }
+.side-row > .side-item { flex: 1; }
+.side-row[draggable="true"] { cursor: grab; }
+.side-row.is-dragging { opacity: .5; background: var(--accent-weak); }
+/* 「…」はマウスを載せた時・開いた時だけ（ふだんは件数を見せる） */
+.side-row > .tb-more-btn { width: 28px; height: 28px; margin-left: -4px; opacity: 0; }
+.side-row:hover > .tb-more-btn, .side-row > .tb-more-btn:focus-visible, .side-row > .tb-more-btn[aria-expanded="true"] { opacity: 1; }
+.side-mini .side-row > .tb-more-btn { display: none; }
+@media (hover: none) { .side-row > .tb-more-btn { opacity: 1; } }
 
 /* スマホ：下のタブと入力欄のぶん、本文の下に余白 */
 @media (max-width: 839.98px) {

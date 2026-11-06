@@ -1,5 +1,6 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask, areaColor } from '../store.js';
+import { updateTask, areaColor, deleteTask, restoreTask, deleteArea, deleteProject, getTasks } from '../store.js';
+import { showToast } from '../toast.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
 import { PRIORITIES, STATUS_LABEL } from '../constants.js';
@@ -161,6 +162,14 @@ function pressBody(task, card) {
 
 let memoSeq = 0;
 
+const TRASH_SVG = (() => {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+  return s;
+})();
+
 // 締切の色分け（どの画面でも同じ）：過ぎた＝赤、今月中＝オレンジ、来月以降＝緑。完了したものは色を付けない
 export function dueTone(dueDate, done = false) {
   if (!dueDate || done) return '';
@@ -216,6 +225,18 @@ export function taskCard(task, opts = {}) {
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,
     ),
   );
+  // PC：行にマウスを載せると右端にゴミ箱。1回でゴミ箱へ移し「元に戻す」を出す（確認は出さない。ゴミ箱に30日残るため）
+  if (!done) {
+    card.append(h('button', {
+      type: 'button', class: 'tb-del', 'aria-label': `「${task.title || '無題'}」を削除`, title: '削除（ゴミ箱へ）',
+      onclick: (e) => {
+        e.stopPropagation();
+        const fail = (err) => showToast(`削除できませんでした（${err.message || err}）`);
+        deleteTask(task.id).catch(fail);
+        showToast('ゴミ箱へ移しました', { action: '元に戻す', onAction: () => restoreTask(task.id).catch(fail) });
+      },
+    }, TRASH_SVG.cloneNode(true)));
+  }
   if (openId === task.id) setExpanded(card, task, true);
   return card;
 }
@@ -231,4 +252,86 @@ export function sectionHead(title, count, opts = {}) {
   if (!opts.onPick) return h('h2', { class: cls }, inner);
   return h('h2', { class: cls },
     h('button', { type: 'button', class: 'tb-sec-btn', 'aria-pressed': String(!!opts.picked), onclick: opts.onPick }, inner));
+}
+
+// 「…」のメニュー。items = [{ label, danger?, confirm?: '2回目の文言', onSelect }]
+// confirm がある項目は、1回目で文言が変わり、もう一度押すと実行（確認の画面は出さない）。
+// 外を押す・Esc・選んだ後に閉じる
+let menuOpen = null;
+function closeMenu() {
+  if (!menuOpen) return;
+  menuOpen.pop.remove();
+  menuOpen.btn.setAttribute('aria-expanded', 'false');
+  menuOpen = null;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (menuOpen && !menuOpen.pop.contains(e.target) && !menuOpen.btn.contains(e.target)) closeMenu();
+}, true);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuOpen) { e.stopPropagation(); closeMenu(); } }, true);
+window.addEventListener('scroll', closeMenu, true);
+
+export function moreMenu(label, getItems, cls = '') {
+  const btn = h('button', {
+    type: 'button', class: 'tb-more-btn' + (cls ? ` ${cls}` : ''), 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': 'false',
+    onclick: (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (menuOpen?.btn === btn) { closeMenu(); return; }
+      closeMenu();
+      const pop = h('div', { class: 'tb-menu', role: 'menu' });
+      for (const it of getItems()) {
+        let armed = false;
+        const b = h('button', { type: 'button', role: 'menuitem', class: 'tb-menu-item' + (it.danger ? ' is-danger' : '') }, it.label);
+        b.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          if (it.confirm && !armed) { armed = true; b.textContent = it.confirm; b.classList.add('is-armed'); return; }
+          closeMenu();
+          it.onSelect();
+        });
+        pop.append(b);
+      }
+      document.body.append(pop);
+      const r = btn.getBoundingClientRect();
+      const w = pop.offsetWidth;
+      pop.style.top = `${Math.min(r.bottom + 4, window.innerHeight - pop.offsetHeight - 8)}px`;
+      pop.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
+      btn.setAttribute('aria-expanded', 'true');
+      menuOpen = { btn, pop };
+      pop.querySelector('button')?.focus();
+    },
+  }, '⋯');
+  // 引きずり・行を開く操作に届かないように
+  btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+  btn.addEventListener('mousedown', (e) => e.stopPropagation());
+  return btn;
+}
+
+// 用途・プロジェクトの「…」の中身（左の一覧とプロジェクトの画面で同じ）。after＝消した後にすること（画面を戻すなど）
+const fail = (what) => (err) => showToast(`${what}できませんでした（${err.message || err}）`);
+export function areaMenuItems(name) {
+  const n = getTasks().filter((x) => x.area === name).length;
+  return [{
+    label: '用途を削除', danger: true,
+    confirm: n ? `もう一度押すと削除（${n}件は用途なし）` : 'もう一度押すと削除',
+    onSelect: () => {
+      const r = deleteArea(name);
+      r.write.catch(fail('用途を削除'));
+      showToast(`「${name}」を削除しました${r.count ? `（${r.count}件は用途なし）` : ''}`, { action: '元に戻す', onAction: () => r.undo().catch(fail('元に戻')) });
+    },
+  }];
+}
+export function projectMenuItems(name, after) {
+  const n = getTasks().filter((x) => x.project === name).length;
+  const run = (withTasks) => {
+    const r = deleteProject(name, withTasks);
+    r.write.catch(fail('プロジェクトを削除'));
+    const msg = !r.count ? '' : withTasks ? `（タスク${r.count}件もゴミ箱へ）` : `（タスク${r.count}件は残しました）`;
+    showToast(`「${name}」を削除しました${msg}`, { action: '元に戻す', onAction: () => r.undo().catch(fail('元に戻')) });
+    after?.();
+  };
+  if (!n) return [{ label: 'プロジェクトを削除', danger: true, confirm: 'もう一度押すと削除', onSelect: () => run(false) }];
+  return [
+    { label: `プロジェクトだけ削除（タスク${n}件は残す）`, danger: true, confirm: 'もう一度押すと削除', onSelect: () => run(false) },
+    { label: `タスク${n}件もゴミ箱へ`, danger: true, confirm: `もう一度押すと${n}件もゴミ箱へ`, onSelect: () => run(true) },
+  ];
 }
