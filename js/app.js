@@ -104,11 +104,13 @@ function renderTabbar() {
   }));
 }
 
-function sideItem({ active, onclick, html, label }) {
+function sideItem({ active, onclick, html, label, count }) {
   const b = el('button', {
     type: 'button', class: 'side-item' + (active ? ' is-active' : ''), 'aria-current': active ? 'page' : null, onclick,
   }, html);
   b.appendChild(el('span', { class: 'side-name', text: label }));
+  // 件数（未完了の数）。読み上げでは「3件」と読む
+  if (count != null) b.appendChild(el('span', { class: 'side-count', 'aria-label': `${count}件`, text: String(count) }));
   return b;
 }
 
@@ -123,12 +125,16 @@ function renderSide() {
 
   const areas = el('div', { class: 'side-sec' });
   areas.appendChild(el('div', { class: 'side-label', text: '用途' }));
+  // 用途ごとの未完了の件数（完了は数えない。一覧の用途タブの初期表示と同じ）
+  const counts = new Map();
+  for (const t of store.getTasks()) if (t.area && t.status !== 'done') counts.set(t.area, (counts.get(t.area) || 0) + 1);
   for (const a of store.areaNames()) {
     const item = sideItem({
       active: state.view === 'list' && p.area === a,
       onclick: () => navigate('list', { area: a }),
       html: '<span class="cat-dot" aria-hidden="true"></span>',
       label: a,
+      count: counts.get(a) || 0,
     });
     const c = store.areaColor(a);
     if (c) item.querySelector('.cat-dot').style.background = c;
