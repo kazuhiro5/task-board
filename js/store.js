@@ -22,7 +22,7 @@
 //
 // 用途の一覧：users/{uid}/meta/areas に { list: [{ name, color }], updatedAt }。文書が無ければ constants.AREAS の6つ。
 //
-// リンク集：users/{uid}/links/{自動の番号} に { area, name, url, createdAt, updatedAt }。
+// リンク集：users/{uid}/links/{自動の番号} に { area（null＝用途なし）, name, url, createdAt, updatedAt }。
 // 1件1文書にしている（一覧を1つの文書にまとめると、2台で同時に足した・消した時に片方が消えるため）。
 //
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
@@ -136,12 +136,12 @@ export function normUrl(raw) {
   return u.href;
 }
 
+// 用途は選ばなくてもよい（null＝用途なし。画面では一番下にまとめる）
 function linkFields({ area, name, url }) {
   const a = String(area || '').trim();
-  if (!a) throw new Error('用途がありません');
   const n = String(name || '').trim();
   if (n.length > 40) throw new Error('名前は40文字までにしてください');
-  return { area: a, name: n, url: normUrl(url) };
+  return { area: a || null, name: n, url: normUrl(url) };
 }
 
 // 足す。おかしい時はその場で Error を投げる（addArea と同じ）。書き込みの Promise を返す

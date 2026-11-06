@@ -14,7 +14,7 @@ import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
 import { renderTrash } from './views/trash.js';
-import { renderLinks } from './views/links.js';
+import { renderLinks, mountLinkAdd } from './views/links.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -192,6 +192,10 @@ function setGroup(g) {
 }
 
 function render() {
+  // リンク集の時だけ、タスクの入力欄の代わりにリンクの入力欄を出す
+  const onLinks = state.view === 'links';
+  $('#add').hidden = onLinks;
+  $('#linkAdd').hidden = !onLinks;
   renderTabbar();
   renderSide();
   const p = state.params;
@@ -259,6 +263,7 @@ function showApp(signedIn) {
 async function boot() {
   renderThemeOpts();
   addBox = mountAdd($('#add'), () => state.ctx);
+  mountLinkAdd($('#linkAdd'));
   store.subscribe(() => { if (!$('#appRoot').hidden) render(); });
 
   if (store.demo) {
