@@ -5,11 +5,11 @@
 //   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
 //   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
-import { updateTask, areaNames, phaseName, renamePhase, deletePhase } from '../store.js';
+import { updateTask, areaNames, phaseName, renamePhase, deletePhase, lastHistory, undo, group, getTasks } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot, moreMenu } from './card.js';
-import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
+import { loadSort, saveSort, sorter, sortSelect, planDrop, saveWrites } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
 import { showToast } from '../toast.js';
 
@@ -116,6 +116,25 @@ function ctxFor(key, v) {
 const idOf = (key, v) => `${key}:${v === NONE ? '' : v}`;
 const nameOf = (g, v) => (v === NONE ? (g.noneLabel || '未設定') : g.label(v));
 
+// 区分（フェーズ・状態）へ引きずって落とした時：区分が変わればその値を書き、区分の中の順番（order）も書く。
+// 動かしたら必ず「元に戻す」を出す。落とす先の名前＝'phase:番号'（フェーズなし＝'phase:'）／'status:値'
+const manual = sorter('manual');
+const byManual = (a, b) => (isOpen(a) ? 0 : 1) - (isOpen(b) ? 0 : 1) || manual(a, b);
+function dropToGroup({ id, fromKey, toKey, finalIds }) {
+  const byId = new Map(getTasks().map((x) => [x.id, x]));
+  const task = byId.get(id);
+  if (!task) return;
+  const [key, v] = [toKey.slice(0, toKey.indexOf(':')), toKey.slice(toKey.indexOf(':') + 1)];
+  const patch = {};
+  if (key === 'phase') { const nv = v ? Number(v) : null; if ((task.phase ?? null) !== nv) patch.phase = nv; }
+  if (key === 'status' && (task.status || 'todo') !== v) patch.status = v;
+  const writes = planDrop({ id, finalIds, byId, datePatch: patch, sameZone: fromKey === toKey, mode: 'manual' });
+  if (!writes.length) return;
+  group('move', () => saveWrites(writes, (err) => showToast(`動かせませんでした（${err.message || err}）`)));
+  const entry = lastHistory();
+  showToast(fromKey === toKey ? '並べ替えました' : `「${task.title}」を動かしました`, { action: '元に戻す', onAction: () => undo(entry) });
+}
+
 // フェーズの名前をダブルクリックで直す（プロジェクトの中だけ）。Enter・外を押すで保存、Esc でやめる
 function renamable(nameEl, cfg, key, v) {
   if (key !== 'phase' || !cfg.project || v === NONE) return nameEl;
@@ -173,7 +192,7 @@ function phaseMenu(cfg, key, v, nameEl, tasks) {
         const r = deletePhase(cfg.project, v);
         const fail = (err) => showToast(`フェーズを削除できませんでした（${err.message || err}）`);
         r.write.catch(fail);
-        showToast(`「${label}」を削除しました${r.moved ? `（${r.moved}件はフェーズなし）` : ''}`, { action: '元に戻す', onAction: () => r.undo().catch(fail) });
+        showToast(`「${label}」を削除しました${r.moved ? `（${r.moved}件はフェーズなし）` : ''}`, { action: '元に戻す', onAction: () => undo(r.entry) });
         cfg.rerender();
       },
     },
@@ -214,6 +233,8 @@ function listMode(tasks, cfg, s) {
   if (pickedV === undefined) s.picked = null;
   cfg.setContext({ ...cfg.baseCtx, ...(pickedV !== undefined ? ctxFor(key, pickedV) : {}) });
 
+  const draggable = cfg.scope === 'project' && key === 'phase';
+  if (draggable) for (const items of buckets.values()) items.sort(byManual);
   const sections = [...buckets.entries()].map(([v, items]) => {
     const isPicked = pickedV === v;
     const head = sectionHead(nameOf(g, v), items.length, {
@@ -222,12 +243,14 @@ function listMode(tasks, cfg, s) {
     });
     const menu = phaseMenu(cfg, key, v, renamable(head.querySelector('.tb-sec-title'), cfg, key, v), tasks);
     if (menu) head.append(menu);
-    return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v },
+    return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v, ...(draggable ? { 'data-drop': idOf(key, v), 'data-drop-ok': true } : {}) },
       head,
       items.length ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] }))) : null);
   });
+  const groups = sections.length ? h('div', { class: 'tb-groups' + (cfg.scope === 'project' ? ' is-rows' : '') }, sections) : null;
+  if (groups && draggable) enableDrag(groups, { rootSel: '.tb-groups.is-rows', onDrop: dropToGroup });
   return [groupBar(cfg, s),
-    sections.length ? h('div', { class: 'tb-groups' + (cfg.scope === 'project' ? ' is-rows' : '') }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません'),
+    groups || h('p', { class: 'tb-empty' }, 'タスクはありません'),
     addPhaseBtn(cfg)];
 }
 
@@ -266,6 +289,7 @@ function colsMode(tasks, cfg, s) {
     addPhaseBtn(cfg, 'tb-cols-add'));
 
   const items = cur !== null ? buckets.get(cur) : [];
+  if (key === 'phase') items.sort(byManual);
   const pane = h('section', { class: 'tb-cols-pane', ...(key === 'phase' && cur !== null ? { 'data-drop': idOf(key, cur), 'data-drop-ok': true } : {}) },
     h('div', { class: 'tb-cols-head' },
       h('button', { type: 'button', class: 'tb-btn tb-back tb-cols-back', onclick: () => { s.colOpen = false; cfg.rerender(); } }, '‹ 戻る'),
@@ -277,14 +301,7 @@ function colsMode(tasks, cfg, s) {
 
   const cols = h('div', { class: 'tb-cols' + (s.colOpen ? ' is-open' : '') }, nav, pane);
   if (key === 'phase') {
-    enableDrag(cols, {
-      rootSel: '.tb-cols',
-      onDrop: ({ id, fromKey, toKey }) => {
-        if (fromKey === toKey) return;
-        const v = toKey.slice('phase:'.length);
-        updateTask(id, { phase: v ? Number(v) : null }).catch((err) => showToast(`移せませんでした（${err.message || err}）`));
-      },
-    });
+    enableDrag(cols, { rootSel: '.tb-cols', onDrop: dropToGroup });
   }
   return [groupBar(cfg, s),
     values.length ? cols : h('p', { class: 'tb-empty' }, 'タスクはありません')];
@@ -394,15 +411,17 @@ function boardMode(tasks, cfg) {
     let items = tasks.filter((x) => (x.status || 'todo') === value);
     let more = 0;
     if (value === 'done') ({ items, more } = doneItems(items));
-    else items.sort(compareTasks);
+    else items.sort(byManual);
     const cards = items.map((x) => addMoves(taskCard(x, { hide: ['status'] }), x));
-    return h('section', { class: 'tb-bcol tb-bcol--' + value, 'data-status': value },
+    return h('section', { class: 'tb-bcol tb-bcol--' + value, 'data-status': value, 'data-drop': `status:${value}`, 'data-drop-ok': true },
       sectionHead(name, items.length + more),
       h('div', { class: 'tb-cards' }, cards,
         items.length ? null : h('p', { class: 'tb-empty' }, 'なし'),
         more ? h('p', { class: 'tb-empty' }, `ほか${more}件`) : null));
   });
-  return [h('div', { class: 'tb-board', role: 'region', 'aria-label': 'ボード', tabindex: '0' }, cols)];
+  const board = h('div', { class: 'tb-board', role: 'region', 'aria-label': 'ボード', tabindex: '0' }, cols);
+  enableDrag(board, { rootSel: '.tb-board', onDrop: dropToGroup });
+  return [board];
 }
 
 export function renderModes(tasks, cfg) {

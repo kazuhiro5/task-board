@@ -450,11 +450,17 @@
 .tb-danger.is-armed { background: var(--danger); border-color: var(--danger); color: var(--on-accent); font-weight: 700; }
 
 /* ---- 今日：期限切れ（畳んだ1行。赤は件数だけ） ---- */
+/* 期限切れ・持ち越し：「明日 1」の見出しと同じくらい控えめな小さいボタンを横に並べる。
+   幅は「期限切れ 1000件 ▸」が入るくらいで止める（横いっぱいの枠は主張が強く、今日の予定より先に目に入るため） */
+.tb-od-wrap { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 8px; margin: 0 0 10px; }
+.tb-od-wrap > .tb-sec { margin: 0; }
+.tb-od-wrap > .tb-sec.is-open { flex: 1 0 100%; }
 .tb-od-head { margin: 0 0 6px; font-size: 13px; }
+.tb-od-wrap > .tb-sec:not(.is-open) .tb-od-head { margin: 0; }
 .tb-od-btn {
-  display: flex; align-items: center; gap: 8px; width: 100%; min-height: var(--tap);
-  padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
-  font: inherit; font-weight: 600; color: var(--muted); text-align: left; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; min-width: 9.5em; min-height: 32px;
+  padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  font: inherit; font-size: 13px; font-weight: 700; color: var(--text); text-align: left; cursor: pointer;
 }
 .tb-od-btn:hover { border-color: var(--muted); }
 .tb-od-n { color: var(--danger); font-weight: 700; }
@@ -513,8 +519,10 @@
 .tb-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .tb-link-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb-link-host { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
-.tb-link-out { margin-left: auto; flex: none; color: var(--muted); }
-.tb-link-edit { flex: none; font-size: 13px; }
+.tb-link-edit { flex: none; display: grid; place-items: center; width: var(--tap); min-width: var(--tap); padding: 0; color: var(--muted); }
+.tb-link-edit svg { width: 18px; height: 18px; }
+.tb-link-edit:hover { color: var(--accent); }
+.tb-link .tb-dot { flex: none; }
 .tb-link-form { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); }
 .tb-link-del { margin-left: auto; }
 /* リンクの入力欄：スマホでも「名前 → その下にURL・用途」の順。
@@ -559,3 +567,16 @@
   color: var(--muted); cursor: grab; font-size: 16px; touch-action: none;
 }
 .tb-link-grip.tb-body:hover { color: var(--text); }
+
+/* ---- 用途管理・プロジェクト管理 ---- */
+.tb-manage { max-width: 760px; }
+.tb-manage-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tb-manage-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; min-height: 48px; padding: 6px 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+}
+.tb-manage-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.tb-manage-info { font-size: 13px; color: var(--muted); margin-right: auto; }
+.tb-manage-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.tb-manage-del { color: var(--danger); font-size: 13px; }
+.tb-manage-del.is-armed { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: 700; }

@@ -10,7 +10,7 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, restoreTask, projectNames, getPhases, areaNames } from './store.js';
+import { updateTask, deleteTask, projectNames, getPhases, areaNames, lastHistory, undo } from './store.js';
 import { showToast } from './toast.js';
 import { todayKey, addDays } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
@@ -298,10 +298,8 @@ export function openEdit(task) {
     deleteTask(task.id).catch((err) => {
       showError(`「${orig.title}」を削除できませんでした（${err.message || err}）`);
     });
-    showToast('削除しました', {
-      action: '元に戻す',
-      onAction: () => restoreTask(task.id).catch((err) => showError(`戻せませんでした（${err.message || err}）`)),
-    });
+    const entry = lastHistory();
+    showToast('削除しました', { action: '元に戻す', onAction: () => undo(entry) });
   });
   const closeBtn = el('button', { type: 'button', class: 'edit-close', text: '閉じる', onclick: () => closeEdit() });
   const expandBtn = el('button', {

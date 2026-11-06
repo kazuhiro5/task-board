@@ -8,13 +8,15 @@
 //   画面は render(container, tasks, opts) の opts.params で受け取る（params は保存しない。再読み込みで {} に戻る）
 import * as store from './store.js';
 import { mountAdd } from './add.js';
-import { inlineAdder, moreMenu, areaMenuItems, projectMenuItems } from './views/card.js';
+import { inlineAdder } from './views/card.js';
+import { renderManageAreas, renderManageProjects } from './views/manage.js';
 import { renderToday } from './views/today.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
 import { renderTrash } from './views/trash.js';
 import { renderSearch, focusSearch } from './views/search.js';
+import { showToast } from './toast.js';
 import { renderLinks, mountLinkAdd } from './views/links.js';
 import { writeBackup, lastBackupLabel } from './backup.js';
 
@@ -27,6 +29,7 @@ const ICONS = {
   project: '<path d="M4 6h16M4 12h10M4 18h7"/>',
   sideClose: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>',
   sideOpen: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
   links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 };
@@ -40,7 +43,7 @@ const VIEWS = {
   links: { label: 'リンク集', render: renderLinks },
 };
 // タブ・左の一覧に出さない画面（⋯メニューから開く）。開いた画面としては保存しない
-const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash }, search: { label: '検索', render: renderSearch } };
+const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash }, search: { label: '検索', render: renderSearch }, manageAreas: { label: '用途管理', render: renderManageAreas }, manageProjects: { label: 'プロジェクト管理', render: renderManageProjects } };
 
 // 用途の一覧と色は store の areaNames()／areaColor()（Firestore の meta/areas。足した用途も含む）
 const SIDE_PROJECTS = 8; // 左の一覧に出すプロジェクトの数（最近触った順）
@@ -112,11 +115,11 @@ function renderTabbar() {
   }));
 }
 
-// 用途・プロジェクトの行：押す所（.side-item）と「…」を横に並べる（並べ替えはこの行ごと）
-function sideRow(name, item, menu) {
+// 用途・プロジェクトの行（並べ替えはこの行ごと）。削除はここに置かない（押し間違えると影響が大きいため、⋯メニューの「用途管理」「プロジェクト管理」から）
+function sideRow(name, item) {
   const row = el('div', { class: 'side-row' });
   row.dataset.name = name;
-  row.append(item, menu);
+  row.append(item);
   return row;
 }
 
@@ -161,7 +164,7 @@ function renderSide() {
     });
     const c = store.areaColor(a);
     if (c) item.querySelector('.cat-dot').style.background = c;
-    areas.appendChild(sideRow(a, item, moreMenu(`${a}のメニュー`, () => areaMenuItems(a))));
+    areas.appendChild(sideRow(a, item));
   }
   areas.appendChild(inlineAdder('side-area', {
     label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: store.addArea, rerender: render,
@@ -179,9 +182,7 @@ function renderSide() {
       label: name,
       count: pcounts.get(name) || 0,
     });
-    // 開いているプロジェクトを消したら、プロジェクトの一覧へ戻る
-    const after = () => { if (state.view === 'projects' && state.params.project === name) navigate('projects', {}); };
-    projs.appendChild(sideRow(name, item, moreMenu(`${name}のメニュー`, () => projectMenuItems(name, after))));
+    projs.appendChild(sideRow(name, item));
   }
   projs.appendChild(inlineAdder('side-project', {
     label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: store.addProject, rerender: render,
@@ -334,6 +335,26 @@ $('#backupBtn').addEventListener('click', async () => {
   showBackupLast();
 });
 
+// 右上の「元に戻す」と Ctrl+Z（⌘Z）：変えた順に1つずつ戻す（store の履歴。保存ボタンは置かない）
+function doUndo() {
+  if (store.undo()) showToast('1つ前に戻しました');
+  else showToast('戻せる操作はありません');
+}
+$('#undoBtn').insertAdjacentHTML('afterbegin', icon('undo'));
+$('#undoBtn').addEventListener('click', doUndo);
+const syncUndo = () => { $('#undoBtn').disabled = !store.canUndo(); };
+store.onHistory(syncUndo);
+syncUndo();
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+  const t = e.target;
+  // 文字を打っている所では、ブラウザの文字の取り消しを優先する
+  if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+  if ($('#appRoot').hidden) return;
+  e.preventDefault();
+  doUndo();
+});
+
 // 上の虫めがね・「/」キー（打っている途中でない時）で検索を開く
 function openSearch() { navigate('search', {}); focusSearch(); }
 $('#searchBtn').insertAdjacentHTML('afterbegin', icon('search'));
@@ -346,6 +367,15 @@ document.addEventListener('keydown', (e) => {
   e.preventDefault();
   openSearch();
 });
+
+// ⋯メニューの「用途管理」「プロジェクト管理」（削除はここからだけ）
+for (const [id, view] of [['manageAreasBtn', 'manageAreas'], ['manageProjectsBtn', 'manageProjects']]) {
+  $(`#${id}`).addEventListener('click', () => {
+    const d = document.querySelector('details.user');
+    if (d) d.open = false;
+    navigate(view, {});
+  });
+}
 
 // ⋯メニューの「ゴミ箱」
 $('#trashBtn').addEventListener('click', () => {
@@ -403,5 +433,14 @@ if (navigator.storage && navigator.storage.persist) {
 }
 
 if ('serviceWorker' in navigator && !store.demo) {
+  // 新しい版が入ったら読み込み直す（控えをすぐ返す作りのため、そのままだと1つ前の版が見え続ける）。
+  // 初めて入った時（それまで控えが無かった時）は読み込み直さない
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
   navigator.serviceWorker.register('./sw.js').catch(() => { /* なくても動く */ });
 }

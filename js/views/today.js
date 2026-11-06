@@ -5,16 +5,16 @@
 // 「明日」より先は、やる日（doDate）があればその日、なければ締切（dueDate）の日に置く。
 // 引きずって動かす：「今日」「明日」「日付ごとの見出し」へ落とすと、やる日をその日に。同じ区分の中の上下は順番（order）。
 //   期限切れ・進行中・受信箱・今日終えたもの へは落とせない。受信箱・進行中からは引きずり出せる（期限切れは動かしても期限切れに残るので動かさない）
-// 上に「並び替え▼」（tb.sort.today）。各区分の中の並びにだけ効く。
+// 各区分の中は、引きずって決めた順（手動）だけ。並び替えの欄は置かない（引きずれば並べ替えられるため）。
 // 期限切れは「期限切れ N件 ▸」の1行だけ。押すと中身が伸びる（開いたかは tb.overdueOpen）。
 // 持ち越し（やる日が昨日以前で、締切は過ぎていない）も同じ形の1行（tb.carryOpen）。今日の区分に混ぜると今日やることが埋もれるため。
 //   中の上に一括ボタン「全部今日へ／全部明日へ／日付なしへ」（やる日と締切の両方を書き換える）。2回押し。
 //   書いた直後に「◯件を動かしました・元に戻す」（元のやる日・締切に戻す）。
 import { todayKey, toKey, addDays, label } from '../dates.js';
 import { h, isOpen, taskCard, sectionHead } from './card.js';
-import { loadSort, saveSort, sorter, sortSelect } from './sort.js';
+import { sorter } from './sort.js';
 import { enableDrag, dropToDay } from './dnd.js';
-import { updateMany, areaNames, projectNames } from '../store.js';
+import { updateMany, areaNames, projectNames, lastHistory, undo } from '../store.js';
 import { showToast } from '../toast.js';
 
 const AHEAD = 14; // 最初に出すのは何日先まで（それより先は「もっと見る」）
@@ -67,14 +67,11 @@ const BULK = [
 // 期限切れをまとめて動かす。元の日付を覚えておき、「元に戻す」で戻す
 function moveAll(list, key, t) {
   const day = key === 'today' ? t : key === 'tomorrow' ? addDays(t, 1) : null;
-  const before = list.map((x) => ({ id: x.id, patch: { doDate: x.doDate || null, dueDate: x.dueDate || null } }));
   const fail = (e) => { console.warn('[task-board] 一括の書き換えに失敗', e); showToast(`動かせませんでした（${e.message || e}）`); };
   updateMany(list.map((x) => ({ id: x.id, patch: { doDate: day, dueDate: day } }))).catch(fail);
+  const entry = lastHistory();
   const label = BULK.find((b) => b.key === key).done;
-  showToast(`${list.length}件を${label}動かしました`, {
-    action: '元に戻す',
-    onAction: () => updateMany(before).catch(fail),
-  });
+  showToast(`${list.length}件を${label}動かしました`, { action: '元に戻す', onAction: () => undo(entry) });
 }
 
 // 期限切れ：畳んだ1行＋中身
@@ -151,7 +148,7 @@ export function renderToday(container, tasks, opts) {
   const tomorrow = addDays(t, 1);
   const limit = addDays(t, AHEAD);
   const open = tasks.filter(isOpen);
-  const mode = loadSort('today');
+  const mode = 'manual';
   const cmp = sorter(mode);
 
   // 絞り込みの選択肢：未完了がある用途（用途の並び）とプロジェクト（左の一覧の並び）
@@ -208,7 +205,7 @@ export function renderToday(container, tasks, opts) {
   projects.length ? h('optgroup', { label: 'プロジェクト' }, projects.map((p) => h('option', { value: `p:${p}` }, `${p}（${count('project', p)}）`))) : null);
   pick.value = filter ? `${filter.by === 'area' ? 'a' : 'p'}:${filter.name}` : '';
 
-  const topBar = h('div', { class: 'tb-today-top' }, pick, sortSelect('today', mode, () => opts.rerender()));
+  const topBar = h('div', { class: 'tb-today-top' }, pick);
   const chips = null;
   const filterBar = filter
     ? h('div', { class: 'tb-filter' },
@@ -238,8 +235,7 @@ export function renderToday(container, tasks, opts) {
     topBar,
     chips,
     filterBar,
-    overdueBox(overdue, t, opts),
-    carryBox(carry, opts),
+    overdue.length || carry.length ? h('div', { class: 'tb-od-wrap' }, overdueBox(overdue, t, opts), carryBox(carry, opts)) : null,
     section(`今日　${label(t)}`, today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today', class: 'tb-sec tb-sec--today' }, { drop: 'today' }),
     section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,
@@ -251,16 +247,16 @@ export function renderToday(container, tasks, opts) {
 
   // 区分の名前 → やる日
   const dateOf = (k) => (k === 'today' ? t : k === 'tomorrow' ? tomorrow : /^\d{4}-\d{2}-\d{2}$/.test(k) ? k : null);
-  const setManual = () => { saveSort('today', 'manual'); opts.rerender(); };
+  const setManual = () => opts.rerender();
   enableDrag(root, {
     rootSel: '.tb-today',
-    onDrop: (ev) => dropToDay(ev, { mode: loadSort('today'), sameZoneSetsDate: false, dateOf, setManual }),
+    onDrop: (ev) => dropToDay(ev, { mode: 'manual', sameZoneSetsDate: false, dateOf, setManual }),
     // Alt+←/→：前後の日へ（今日より前には戻さない。受信箱・進行中からは → で今日へ）
     onKey: (id, key, dir) => {
       const from = dateOf(key);
       const day = from ? addDays(from, dir) : dir > 0 ? t : null;
       if (!day || day < t) return;
-      dropToDay({ id, fromKey: key, toKey: day, finalIds: [id] }, { mode: loadSort('today'), sameZoneSetsDate: false, dateOf, setManual });
+      dropToDay({ id, fromKey: key, toKey: day, finalIds: [id] }, { mode: 'manual', sameZoneSetsDate: false, dateOf, setManual });
     },
   });
   container.replaceChildren(root);

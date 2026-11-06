@@ -41,6 +41,7 @@ let projects = new Map(); // プロジェクト名 → { phases, updatedAt }
 let areaList = null; // 用途の一覧（null＝文書なし。決まった6つとして扱う）
 let links = []; // リンク集（足した順）
 let projectOrder = []; // 左の一覧で引きずって決めたプロジェクトの順（meta/areas の projectOrder）
+let linkAreaOrder = []; // リンク集の用途の塊の順（meta/areas の linkAreaOrder。'' は用途なし）。左の一覧の用途の順とは別
 
 export const DEFAULT_PHASES = 5;
 const TRASH_DAYS = 30;
@@ -50,6 +51,64 @@ const BATCH_MAX = 500; // Firestore の writeBatch 1回の上限
 function setAll(list) {
   allTasks = list;
   tasks = list.filter((x) => !x.deletedAt);
+}
+
+// ---- 元に戻す（履歴） ----
+// 変えるたびに「戻し方」を積み、undo() で新しいものから1つずつ戻す（右上のボタン・Ctrl+Z・お知らせの「元に戻す」）。
+// 保存ボタンは作らない（変えた瞬間に保存する作りのまま。押し忘れで消えるのを防ぐため）。
+// 戻し方は待たずに呼ぶ（Firestore はオフラインだと Promise が終わらないが、端末内にはすぐ入る）。
+// 1つの操作で何件も書く時（引きずって並べ替える等）は group() でまとめて1回分にする
+const HISTORY_MAX = 30;
+let history = [];
+let txn = null; // group() の中で集めている戻し方
+let replaying = false; // 戻している最中（その書き込みは履歴に積まない）
+let historyListeners = [];
+function record(fn, label) {
+  if (replaying) return null;
+  if (txn) { txn.push(fn); return null; }
+  return pushEntry([fn], label);
+}
+function pushEntry(fns, label = '') {
+  const e = { fns, label };
+  history = [...history, e].slice(-HISTORY_MAX);
+  for (const cb of historyListeners) cb(history.length);
+  return e;
+}
+export function group(label, fn) {
+  if (replaying) return fn();
+  const outer = txn;
+  if (!outer) txn = [];
+  try { return fn(); } finally {
+    if (!outer) {
+      const fns = txn;
+      txn = null;
+      if (fns.length) pushEntry(fns, label);
+    }
+  }
+}
+// 今いちばん新しい履歴（お知らせの「元に戻す」が、その操作の分だけを戻すために持つ）
+export function lastHistory() { return history[history.length - 1] || null; }
+export function canUndo() { return history.length > 0; }
+export function onHistory(cb) { historyListeners.push(cb); }
+// entry を指定しなければ一番新しいもの。戻したら true
+export function undo(entry) {
+  const e = entry || history[history.length - 1];
+  if (!e || !history.includes(e)) return false;
+  history = history.filter((x) => x !== e);
+  for (const cb of historyListeners) cb(history.length);
+  replaying = true;
+  try {
+    for (const f of [...e.fns].reverse()) {
+      try { const r = f(); r?.catch?.((err) => console.warn('[task-board] 元に戻せませんでした', err)); } catch (err) { console.warn('[task-board] 元に戻せませんでした', err); }
+    }
+  } finally { replaying = false; }
+  return true;
+}
+// 履歴に積まずに書く（消す系の関数が、自分の戻し方を1つだけ積むため）
+function quiet(fn) {
+  const was = replaying;
+  replaying = true;
+  try { return fn(); } finally { replaying = was; }
 }
 
 function emit() {
@@ -89,6 +148,8 @@ export function phaseName(project, n) {
 export function renamePhase(project, n, raw) {
   const name = String(raw || '').trim().slice(0, 30);
   const cur = projects.get(project) || {};
+  const old = cur.phaseNames?.[n] || '';
+  record(() => renamePhase(project, n, old));
   const phaseNames = { ...(cur.phaseNames || {}), [n]: name };
   projects = new Map(projects).set(project, { ...cur, phaseNames });
   emit();
@@ -213,6 +274,13 @@ export function reorderLinks(area, ids) {
     if (Object.keys(patch).length) writes.push([id, patch]);
   });
   if (!writes.length) return Promise.resolve();
+  const back = writes.map(([id]) => [id, { order: byId.get(id).order ?? null, area: byId.get(id).area || null }]);
+  record(() => {
+    const m = new Map(back);
+    setLinks(links.map((x) => (m.has(x.id) ? { ...x, ...m.get(x.id) } : x)));
+    emit();
+    return Promise.all(back.map(([id, patch]) => backend.updateLink(id, { ...patch, updatedAt: Date.now() })));
+  });
   const map = new Map(writes);
   setLinks(links.map((x) => (map.has(x.id) ? { ...x, ...map.get(x.id) } : x)));
   emit();
@@ -261,6 +329,8 @@ export function projectNames() {
 
 // 左の一覧で引きずって並べ替えた時。names は新しい順の名前
 export function reorderAreas(names) {
+  const prev = areaNames();
+  record(() => reorderAreas(prev));
   const byName = new Map(getAreas().map((a) => [a.name, a]));
   const list = names.filter((n) => byName.has(n)).map((n) => byName.get(n));
   for (const a of getAreas()) if (!names.includes(a.name)) list.push(a);
@@ -268,7 +338,19 @@ export function reorderAreas(names) {
   emit();
   return backend.setMeta({ list });
 }
+// リンク集の用途の塊の順。keys は '' ＝用途なし
+export function getLinkAreaOrder() { return linkAreaOrder; }
+export function reorderLinkAreas(keys) {
+  const prev = linkAreaOrder;
+  record(() => reorderLinkAreas(prev));
+  linkAreaOrder = [...keys];
+  emit();
+  return backend.setMeta({ linkAreaOrder });
+}
+
 export function reorderProjects(names) {
+  const prev = projectOrder.length ? projectOrder : projectNames();
+  record(() => reorderProjects(prev));
   projectOrder = [...names];
   emit();
   return backend.setMeta({ projectOrder });
@@ -302,6 +384,12 @@ export async function addTask(data) {
 }
 
 export async function updateTask(id, patch) {
+  const before = allTasks.find((x) => x.id === id);
+  if (before) {
+    const back = {};
+    for (const k of Object.keys(patch)) if (k !== 'updatedAt') back[k] = before[k] ?? null;
+    record(() => updateTask(id, back));
+  }
   const p = { ...patch, updatedAt: Date.now() };
   if ('status' in patch) p.completedAt = patch.status === 'done' ? Date.now() : null;
   if ('project' in patch) p.project = patch.project ? String(patch.project).trim() : null;
@@ -368,11 +456,13 @@ function nextOf(t, rep) {
 
 // 削除＝ゴミ箱へ（文書は消さず deletedAt を付ける）
 export async function deleteTask(id) {
+  record(() => restoreTask(id));
   return backend.update(id, { deletedAt: Date.now(), updatedAt: Date.now() });
 }
 
 // ゴミ箱から戻す
 export async function restoreTask(id) {
+  record(() => deleteTask(id));
   return backend.update(id, { deletedAt: null, updatedAt: Date.now() });
 }
 
@@ -389,6 +479,11 @@ export async function purgeTask(id) {
 
 // フェーズ n を消す：n のタスクはフェーズなし、n より後ろのフェーズは1つずつ前へ詰める（名前も一緒に）
 export function deletePhase(project, n) {
+  const r = quiet(() => deletePhaseRaw(project, n));
+  r.entry = record(() => quiet(() => r.undo()));
+  return r;
+}
+function deletePhaseRaw(project, n) {
   const cur = projects.get(project) || {};
   const count = getPhases(project);
   const inside = allTasks.filter((x) => x.project === project && Number.isInteger(x.phase) && x.phase >= n);
@@ -419,6 +514,11 @@ export function deletePhase(project, n) {
 
 // 用途を消す：タスクとリンクの用途を外し、一覧から除く
 export function deleteArea(name) {
+  const r = quiet(() => deleteAreaRaw(name));
+  r.entry = record(() => quiet(() => r.undo()));
+  return r;
+}
+function deleteAreaRaw(name) {
   const oldList = getAreas();
   const list = oldList.filter((a) => a.name !== name);
   const ts = allTasks.filter((x) => x.area === name);
@@ -444,6 +544,11 @@ export function deleteArea(name) {
 
 // プロジェクトを消す。withTasks＝true ならタスクもゴミ箱へ、false ならタスクからプロジェクトとフェーズを外す
 export function deleteProject(name, withTasks) {
+  const r = quiet(() => deleteProjectRaw(name, withTasks));
+  r.entry = record(() => quiet(() => r.undo()));
+  return r;
+}
+function deleteProjectRaw(name, withTasks) {
   const saved = projects.get(name) || null;
   const ts = allTasks.filter((x) => x.project === name && !x.deletedAt);
   const oldOrder = projectOrder;
@@ -473,6 +578,13 @@ export function deleteProject(name, withTasks) {
 }
 
 export async function updateMany(entries) {
+  const byId = new Map(allTasks.map((x) => [x.id, x]));
+  const back = entries.filter(({ id }) => byId.has(id)).map(({ id, patch }) => {
+    const b = {};
+    for (const k of Object.keys(patch)) if (k !== 'updatedAt') b[k] = byId.get(id)[k] ?? null;
+    return { id, patch: b };
+  });
+  if (back.length) record(() => updateMany(back));
   const now = Date.now();
   return backend.batch(entries.map(({ id, patch }) => ({ type: 'update', id, data: { ...patch, updatedAt: now } })));
 }
@@ -528,6 +640,8 @@ async function firestoreBackend(uid) {
     const list = snap.exists() ? snap.data().list : null;
     const po = snap.exists() ? snap.data().projectOrder : null;
     projectOrder = Array.isArray(po) ? po.filter((n) => typeof n === 'string') : [];
+    const lo = snap.exists() ? snap.data().linkAreaOrder : null;
+    linkAreaOrder = Array.isArray(lo) ? lo.filter((n) => typeof n === 'string') : [];
     areaList = Array.isArray(list) && list.length
       ? list.filter((a) => a && typeof a.name === 'string' && a.name).map((a) => ({ name: a.name, color: a.color || null }))
       : null;
@@ -591,6 +705,7 @@ function demoBackend() {
   projects = new Map();
   areaList = null;
   projectOrder = [];
+  linkAreaOrder = [];
   setLinks([
     { id: 'demoL1', area: '大学', name: 'manaba', url: 'https://manaba.cit.ac.jp/', createdAt: 1 },
     { id: 'demoL2', area: '大学', name: '', url: 'https://portal.it-chiba.ac.jp/', createdAt: 2 },
@@ -634,6 +749,7 @@ export function stop() {
   projects = new Map();
   areaList = null;
   projectOrder = [];
+  linkAreaOrder = [];
   links = [];
   emit();
 }

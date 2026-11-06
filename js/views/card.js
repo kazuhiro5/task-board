@@ -1,5 +1,5 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask, areaColor, deleteTask, restoreTask, deleteArea, deleteProject, getTasks } from '../store.js';
+import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo } from '../store.js';
 import { showToast } from '../toast.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
@@ -233,7 +233,8 @@ export function taskCard(task, opts = {}) {
         e.stopPropagation();
         const fail = (err) => showToast(`削除できませんでした（${err.message || err}）`);
         deleteTask(task.id).catch(fail);
-        showToast('ゴミ箱へ移しました', { action: '元に戻す', onAction: () => restoreTask(task.id).catch(fail) });
+        const entry = lastHistory();
+        showToast('ゴミ箱へ移しました', { action: '元に戻す', onAction: () => undo(entry) });
       },
     }, TRASH_SVG.cloneNode(true)));
   }
@@ -316,7 +317,7 @@ export function areaMenuItems(name) {
     onSelect: () => {
       const r = deleteArea(name);
       r.write.catch(fail('用途を削除'));
-      showToast(`「${name}」を削除しました${r.count ? `（${r.count}件は用途なし）` : ''}`, { action: '元に戻す', onAction: () => r.undo().catch(fail('元に戻')) });
+      showToast(`「${name}」を削除しました${r.count ? `（${r.count}件は用途なし）` : ''}`, { action: '元に戻す', onAction: () => undo(r.entry) });
     },
   }];
 }
@@ -326,7 +327,7 @@ export function projectMenuItems(name, after) {
     const r = deleteProject(name, withTasks);
     r.write.catch(fail('プロジェクトを削除'));
     const msg = !r.count ? '' : withTasks ? `（タスク${r.count}件もゴミ箱へ）` : `（タスク${r.count}件は残しました）`;
-    showToast(`「${name}」を削除しました${msg}`, { action: '元に戻す', onAction: () => r.undo().catch(fail('元に戻')) });
+    showToast(`「${name}」を削除しました${msg}`, { action: '元に戻す', onAction: () => undo(r.entry) });
     after?.();
   };
   if (!n) return [{ label: 'プロジェクトを削除', danger: true, confirm: 'もう一度押すと削除', onSelect: () => run(false) }];

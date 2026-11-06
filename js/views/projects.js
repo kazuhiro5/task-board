@@ -4,7 +4,7 @@
 // opts.params.project があれば、最初からそのプロジェクトの中を開く。
 // 中のリスト・3列はフェーズごとに区切る（フェーズの数は store の getPhases。決定/0007）。
 import { addPhase, getPhases, areaNames, projectNames, addProject } from '../store.js';
-import { h, isOpen, md, areaDot, inlineAdder, dueTone, moreMenu, projectMenuItems } from './card.js';
+import { h, isOpen, md, areaDot, inlineAdder, dueTone } from './card.js';
 import { renderModes, resetScope } from './modes.js';
 
 let openName = null; // 開いているプロジェクト
@@ -103,9 +103,7 @@ export function renderProjects(container, tasks, opts) {
     h('div', { class: 'tb-phead' },
       h('button', { type: 'button', class: 'tb-btn tb-back', onclick: () => open(null, opts) }, '‹ プロジェクト'),
       h('h2', { class: 'tb-phead-name' }, openName),
-      h('span', { class: 'tb-count' }, `${p.done}/${p.total}`),
-      // スマホには左の一覧が無いので、プロジェクトの削除はここからもできるようにする
-      moreMenu(`${openName}のメニュー`, () => projectMenuItems(name, () => open(null, opts)), 'tb-phead-more')),
+      h('span', { class: 'tb-count' }, `${p.done}/${p.total}`)),
     phaseError,
     renderModes(inside, {
       scope: 'project',

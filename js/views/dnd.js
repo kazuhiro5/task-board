@@ -9,10 +9,11 @@
 // enableDrag(rootEl, cfg)：描画のたびに新しい根の要素に付ける。
 //   cfg = { rootSel, onDrop({ id, fromKey, toKey, toZone, finalIds }), onKey?(id, fromKey, dir) }
 //   引きずっている間に描き直されても、rootSel で今の根を探し直す。
-import { getTasks } from '../store.js';
+import { getTasks, group, lastHistory, undo } from '../store.js';
+import { showToast } from '../toast.js';
 import { planDrop, saveWrites } from './sort.js';
 import { h } from './card.js';
-import { addDays } from '../dates.js';
+import { addDays, relLabel } from '../dates.js';
 
 const MOUSE_SLOP = 5;
 const TOUCH_SLOP = 10;
@@ -276,7 +277,11 @@ export function dropToDay(ev, opts) {
   const writes = planDrop({ id: ev.id, finalIds: ev.finalIds, byId, datePatch, sameZone, mode: opts.mode });
   if (sameZone && opts.mode !== 'manual') opts.setManual();
   if (!writes.length) return;
-  saveWrites(writes, () => showDropError());
+  group('move', () => saveWrites(writes, () => showDropError()));
+  // 動かしたら必ず「元に戻す」を出す（間違えて動かしたまま忘れるのを防ぐ）
+  const entry = lastHistory();
+  showToast(datePatch.doDate ? `「${task.title}」を${relLabel(datePatch.doDate)}に動かしました` : '並べ替えました',
+    { action: '元に戻す', onAction: () => undo(entry) });
 }
 
 function showDropError() {

@@ -4,7 +4,7 @@
 //   「編集」で名前・URL・用途を直す・消す（消すは2回押し。ゴミ箱には入れない）。
 // mountLinkAdd(container)：リンク集の時だけ、タスクの入力欄の代わりに出す「リンクを追加」の入力欄。
 //   見た目と開き方はタスクの入力欄（add.js）と同じ（1行目＝名前＋追加。押すと URL・用途の行が開く）。
-import { getLinks, addLink, updateLink, deleteLink, areaNames, subscribe, reorderLinks } from '../store.js';
+import { getLinks, addLink, updateLink, deleteLink, areaNames, subscribe, reorderLinks, getLinkAreaOrder, reorderLinkAreas, lastHistory, undo } from '../store.js';
 import { enableDrag } from './dnd.js';
 import { h, areaDot } from './card.js';
 import { showToast } from '../toast.js';
@@ -167,15 +167,56 @@ function editForm(x, rerender) {
   return f;
 }
 
+// 用途の塊（見出し）を引きずって並べ替える。見出しはPCのマウス向けに標準の draggable を使う
+// （行の中のリンクの引きずりは dnd.js。塊ごと動かすのは見出しをつかんだ時だけ）
+function sortGroups(root) {
+  const box = root.querySelector('.tb-groups');
+  if (!box) return;
+  const secs = () => [...box.querySelectorAll(':scope > .tb-link-sec')];
+  let cur = null;
+  const before = secs().map((s) => s.dataset.area).join('|');
+  for (const sec of secs()) {
+    const head = sec.querySelector('.tb-link-head');
+    head.addEventListener('dragstart', (e) => { cur = sec; sec.classList.add('is-dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', sec.dataset.area); });
+    head.addEventListener('dragend', () => {
+      sec.classList.remove('is-dragging');
+      cur = null;
+      const keys = secs().map((s) => s.dataset.area);
+      if (keys.join('|') !== before) {
+        reorderLinkAreas(keys).catch(fail('並べ替えを保存できませんでした'));
+        const entry = lastHistory();
+        showToast('並べ替えました', { action: '元に戻す', onAction: () => undo(entry) });
+      }
+    });
+  }
+  box.addEventListener('dragover', (e) => {
+    if (!cur) return;
+    e.preventDefault();
+    const after = secs().find((s) => s !== cur && e.clientY < s.getBoundingClientRect().top + s.offsetHeight / 2);
+    if (after) after.before(cur); else box.append(cur);
+  });
+  box.addEventListener('drop', (e) => { if (cur) e.preventDefault(); });
+}
+
+// 編集ボタンのペンのアイコン
+function PEN_SVG() {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = '<path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
+  return s;
+}
+
 function linkRow(x, rerender) {
   if (ed.id === x.id) return h('li', { class: 'tb-link-item is-editing' }, editForm(x, rerender));
   // tb-card・tb-body は引きずり（dnd.js）が「動かせる行」「つかむ所」を見分ける印。つかむのは左の ⠿ だけ（リンクを押すと開くため）
   return h('li', { class: 'tb-link-item tb-card', 'data-id': x.id },
     h('button', { type: 'button', class: 'tb-body tb-link-grip', 'aria-label': `${label(x)}を並べ替え（引きずる）`, title: '引きずって並べ替え' }, '⠿'),
     h('a', { class: 'tb-link', href: x.url, target: '_blank', rel: 'noopener noreferrer' },
+      x.area ? areaDot(x.area) : null,
       h('span', { class: 'tb-link-name' }, label(x)),
       x.name ? h('span', { class: 'tb-link-host' }, host(x.url)) : null,
-      h('span', { class: 'tb-link-out', 'aria-hidden': 'true' }, '↗')),
+),
     h('button', {
       type: 'button',
       class: 'tb-btn tb-link-edit',
@@ -185,7 +226,7 @@ function linkRow(x, rerender) {
         Object.assign(ed, { id: x.id, name: x.name || '', url: x.url, area: x.area || null, focus: true });
         rerender();
       },
-    }, '編集'));
+    }, PEN_SVG()));
 }
 
 export function renderLinks(container, _tasks, opts) {
@@ -197,11 +238,14 @@ export function renderLinks(container, _tasks, opts) {
   // 用途の順（areaNames）→ 一覧に無い用途（消した用途のリンク）→ 用途なし。リンクの無い用途は出さない
   const names = areaNames();
   const unknown = [...new Set(all.map((x) => x.area).filter((a) => a && !names.includes(a)))];
-  const sections = [...names, ...unknown, null]
+  // 塊の順：リンク集で引きずって決めた順 → 残りは用途の順（左の一覧とは別に持つ）
+  const base = [...names, ...unknown, null];
+  const saved = getLinkAreaOrder().map((k) => k || null).filter((a) => base.includes(a));
+  const sections = [...saved, ...base.filter((a) => !saved.includes(a))]
     .map((area) => [area, all.filter((x) => (x.area || null) === area)])
     .filter(([, items]) => items.length)
-    .map(([area, items]) => h('section', { class: 'tb-sec tb-link-sec' },
-      h('h2', { class: 'tb-link-head' },
+    .map(([area, items]) => h('section', { class: 'tb-sec tb-link-sec', 'data-area': area || '' },
+      h('h2', { class: 'tb-link-head', draggable: 'true', title: '引きずって塊の順を変える' },
         area ? areaDot(area) : null, h('span', {}, area || NONE_LABEL),
         h('span', { class: 'tb-link-count', 'aria-label': `${items.length}件` }, String(items.length))),
       // 引きずって並べ替える（別の用途の中へ落とすと用途も変わる）。落とす先の名前＝'link:用途'（用途なし＝'link:'）
@@ -211,11 +255,14 @@ export function renderLinks(container, _tasks, opts) {
     sections.length
       ? [h('p', { class: 'tb-empty' }, '押すと新しいタブで開きます。左の ⠿ を引きずると並べ替えられます'), h('div', { class: 'tb-groups' }, sections)]
       : h('p', { class: 'tb-empty tb-guide' }, 'リンクはまだありません。「リンクを追加」から足せます'));
+  sortGroups(root);
   enableDrag(root, {
     rootSel: '.tb-links',
     onDrop: ({ toKey, finalIds }) => {
       const area = toKey.slice('link:'.length) || null;
       reorderLinks(area, finalIds).catch(fail('並べ替えを保存できませんでした'));
+      const entry = lastHistory();
+      if (entry) showToast('並べ替えました', { action: '元に戻す', onAction: () => undo(entry) });
     },
   });
   container.replaceChildren(root);
