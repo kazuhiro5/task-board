@@ -1,6 +1,7 @@
 // 画面「一覧」。担当：画面役。
 // renderList(container, tasks, opts)：opts = { group, setGroup, setContext, rerender, params, navigate }
-// 上の切り替えで「用途」「進捗」「用途なし」を選ぶ（選んだタブは localStorage の tb.listTab）。横の「絞り込み」で用途を選ぶと、その用途の一覧へ。
+// 上の切り替えで「用途」「用途なし」「進捗」を選ぶ（選んだタブは localStorage の tb.listTab）。
+// 用途タブの「完了を表示」の横の「絞り込み」で用途を選ぶと、その用途の一覧へ（用途なし・進捗のタブには出さない）。
 //   用途：用途ごとのグループ（大学…勉強→未設定）。「完了を表示」で完了も出す
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
 //   用途なし：用途の付いていない未完了（ほかのタブで埋もれがちなもの）。進捗ごと
@@ -13,8 +14,8 @@ import { addMoves, doneItems } from './modes.js';
 
 const TABS = [
   { value: 'area', label: '用途' },
-  { value: 'status', label: '進捗' },
   { value: 'noarea', label: '用途なし' },
+  { value: 'status', label: '進捗' },
 ];
 const NONE = '\u0000none'; // 未設定のグループ
 
@@ -76,6 +77,18 @@ function byArea(list) {
   return buckets;
 }
 
+// 絞り込み：用途を選ぶと、左の一覧でその用途を押した時と同じ画面へ（×で一覧に戻る）
+function areaPick(opts) {
+  const pick = h('select', {
+    class: 'tb-filter-select' + (areaFilter ? ' is-on' : ''), 'aria-label': '絞り込み',
+    onchange: (e) => { const v = e.target.value; if (opts.navigate) opts.navigate('list', v ? { area: v } : {}); },
+  },
+  h('option', { value: '' }, '絞り込み：すべて'),
+  areaNames().map((a) => h('option', { value: a }, a)));
+  pick.value = areaFilter || '';
+  return pick;
+}
+
 // 用途タブ
 function areaTab(scoped, opts) {
   const list = showDone ? scoped : scoped.filter(isOpen);
@@ -88,6 +101,7 @@ function areaTab(scoped, opts) {
       'aria-pressed': String(showDone),
       onclick: () => { showDone = !showDone; opts.rerender(); },
     }, showDone ? '✓ 完了を表示' : '完了を表示'),
+    areaPick(opts),
     // スマホ幅（左の一覧が無い）だけ出す
     h('div', { class: 'tb-narrow-only tb-adder-wrap' }, inlineAdder('list-area', {
       label: '＋ 用途を追加', placeholder: '用途の名前', onAdd: addArea, rerender: opts.rerender,
@@ -151,18 +165,9 @@ export function renderList(container, tasks, opts) {
       }, '×'))
     : null;
 
-  // 絞り込み：用途を選ぶと、左の一覧でその用途を押した時と同じ画面へ（×で一覧に戻る）
-  const pick = h('select', {
-    class: 'tb-filter-select' + (areaFilter ? ' is-on' : ''), 'aria-label': '絞り込み',
-    onchange: (e) => { const v = e.target.value; if (opts.navigate) opts.navigate('list', v ? { area: v } : {}); },
-  },
-  h('option', { value: '' }, '絞り込み：すべて'),
-  h('optgroup', { label: '用途' }, areaNames().map((a) => h('option', { value: a }, a))));
-  pick.value = areaFilter || '';
-
   container.replaceChildren(h('div', { class: 'tb-list' },
     filterBar,
-    h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender), pick),
+    h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender)),
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
       tab === 'status' ? statusTab(scoped, opts) : tab === 'noarea' ? noareaTab(scoped, opts) : areaTab(scoped, opts))));
 }
