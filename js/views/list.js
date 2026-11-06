@@ -33,18 +33,19 @@ function saveTab(v) {
   try { localStorage.setItem('tb.listTab', v); } catch { /* 保存できなくても動く */ }
 }
 
+// プロジェクトの表示の切り替え（modes.js の modeBar）と同じ丸い切り替えにそろえる
 function tabStrip(cur, rerender) {
-  return h('div', { class: 'tb-ctabs', role: 'tablist', 'aria-label': '一覧の切り替え' },
+  return h('div', { class: 'tb-seg tb-modes', role: 'tablist', 'aria-label': '一覧の切り替え' },
     TABS.map((x) => h('button', {
       type: 'button',
       role: 'tab',
       id: `tb-ctab-${x.value}`,
-      class: 'tb-ctab' + (x.value === cur ? ' is-active' : ''),
+      class: 'tb-seg-btn' + (x.value === cur ? ' is-active' : ''),
       'aria-selected': String(x.value === cur),
       'aria-controls': 'tb-ctab-panel',
       'data-tab': x.value,
       onclick: () => { if (x.value !== cur) { saveTab(x.value); picked = null; rerender(); } },
-    }, h('span', { class: 'tb-ctab-label' }, x.label))));
+    }, x.label)));
 }
 
 // 押せる見出し付きの区分。key：'area' | 'status'、v：その値

@@ -25,7 +25,7 @@ export const MODES = [
   { value: 'list', label: '一覧' },
   { value: 'cols', label: '3列' },
   { value: 'cal', label: 'カレンダー' },
-  { value: 'board', label: 'ボード' },
+  { value: 'board', label: '進捗' },
 ];
 
 const NONE = '\u0000none'; // 未設定のグループ
