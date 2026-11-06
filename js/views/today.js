@@ -205,13 +205,10 @@ export function renderToday(container, tasks, opts) {
   projects.length ? h('optgroup', { label: 'プロジェクト' }, projects.map((p) => h('option', { value: `p:${p}` }, `${p}（${count('project', p)}）`))) : null);
   pick.value = filter ? `${filter.by === 'area' ? 'a' : 'p'}:${filter.name}` : '';
 
-  const topBar = h('div', { class: 'tb-today-top' }, pick);
+  const topBar = h('div', { class: 'tb-today-top' }, pick,
+    filter ? h('button', { type: 'button', class: 'tb-x', 'aria-label': '絞り込みを解除', title: '解除', onclick: () => { filter = null; opts.rerender(); } }, '×') : null);
   const chips = null;
-  const filterBar = filter
-    ? h('div', { class: 'tb-filter' },
-      h('span', {}, `「${filter.name}」だけを表示中`),
-      h('button', { type: 'button', class: 'tb-link', onclick: () => { filter = null; opts.rerender(); } }, '解除'))
-    : null;
+  const filterBar = null;
 
   const ahead = h('div', { class: 'tb-ahead', 'aria-label': 'それ以降' },
     shownDays.map((d) => section(label(d), byDay.get(d), dayCard, { 'data-day': d }, { drop: d })),

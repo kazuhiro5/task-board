@@ -1,9 +1,9 @@
 // 画面「一覧」。担当：画面役。
 // renderList(container, tasks, opts)：opts = { group, setGroup, setContext, rerender, params, navigate }
-// 上のChrome風のタブで「用途」「進捗」「日付なし」を切り替える（選んだタブは localStorage の tb.listTab）。
+// 上の切り替えで「用途」「進捗」「用途なし」を選ぶ（選んだタブは localStorage の tb.listTab）。横の「絞り込み」で用途を選ぶと、その用途の一覧へ。
 //   用途：用途ごとのグループ（大学…勉強→未設定）。「完了を表示」で完了も出す
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
-//   日付なし：やる日も締切も無い未完了（用途・プロジェクトが付いていても出す）。用途ごと（未設定は最後）
+//   用途なし：用途の付いていない未完了（ほかのタブで埋もれがちなもの）。進捗ごと
 // opts.params.area があれば、その用途に絞って出す（「就活で絞り込み中 ×」で解除）。
 // 見出しを押すと「ここに追加」（入力欄の初期値をその用途・状態にする）。
 import { STATUSES } from '../constants.js';
@@ -14,7 +14,7 @@ import { addMoves, doneItems } from './modes.js';
 const TABS = [
   { value: 'area', label: '用途' },
   { value: 'status', label: '進捗' },
-  { value: 'nodate', label: '日付なし' },
+  { value: 'noarea', label: '用途なし' },
 ];
 const NONE = '\u0000none'; // 未設定のグループ
 
@@ -26,6 +26,7 @@ let picked = null; // 「ここに追加」で選んだ見出し（'area:大学'
 function loadTab() {
   try {
     const v = localStorage.getItem('tb.listTab');
+    if (v === 'nodate') return 'noarea'; // 前の「日付なし」を選んでいた端末
     return TABS.some((x) => x.value === v) ? v : 'area';
   } catch { return 'area'; }
 }
@@ -96,15 +97,16 @@ function areaTab(scoped, opts) {
   return [bar, sections.length ? h('div', { class: 'tb-groups is-rows' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
 }
 
-// 日付なしタブ：やる日も締切も無い未完了。中身の無い用途は出さない
-function nodateTab(scoped, opts) {
-  const list = scoped.filter((x) => isOpen(x) && !x.doDate && !x.dueDate);
-  const sections = [...byArea(list).entries()]
-    .filter(([, items]) => items.length)
-    .map(([v, items]) => group('nodate', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
+// 用途なしタブ：用途の付いていない未完了。進捗（状態）ごとに分け、中身の無い状態は出さない
+function noareaTab(scoped, opts) {
+  const list = scoped.filter((x) => isOpen(x) && !x.area).sort(compareTasks);
+  const sections = STATUSES.filter((s) => s.value !== 'done')
+    .map(({ value, label }) => [value, label, list.filter((x) => (x.status || 'todo') === value)])
+    .filter(([, , items]) => items.length)
+    .map(([value, label, items]) => group('noarea', value, label, items, (x) => taskCard(x, { hide: ['status'] }), { rerender: opts.rerender }));
   return [sections.length
     ? h('div', { class: 'tb-groups is-rows' }, sections)
-    : h('p', { class: 'tb-empty' }, '日付の無いタスクはありません')];
+    : h('p', { class: 'tb-empty' }, '用途の無いタスクはありません')];
 }
 
 // 進捗タブ
@@ -133,10 +135,9 @@ export function renderList(container, tasks, opts) {
   if (picked && !picked.startsWith(`${tab}:`)) picked = null;
   if (picked && tab !== 'status' && areaFilter && picked !== `${tab}:${areaFilter}`) picked = null;
   const pickedVal = picked ? picked.slice(tab.length + 1) : null;
-  // 日付なしタブの見出しは用途（「ここに追加」で、その用途の日付なしのタスクになる）
-  const ctxKey = tab === 'nodate' ? 'area' : tab;
-  // 日付なしタブで追加したものは、やる日を今日にしない（noDate）
-  opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}), ...(tab === 'nodate' ? { noDate: true } : {}) });
+  // 用途なしタブの見出しは状態（「ここに追加」で、その状態の用途なしのタスクになる）
+  const ctxKey = tab === 'noarea' ? 'status' : tab;
+  opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
 
   const filterBar = areaFilter
     ? h('div', { class: 'tb-filterbar' },
@@ -150,9 +151,18 @@ export function renderList(container, tasks, opts) {
       }, '×'))
     : null;
 
+  // 絞り込み：用途を選ぶと、左の一覧でその用途を押した時と同じ画面へ（×で一覧に戻る）
+  const pick = h('select', {
+    class: 'tb-filter-select' + (areaFilter ? ' is-on' : ''), 'aria-label': '絞り込み',
+    onchange: (e) => { const v = e.target.value; if (opts.navigate) opts.navigate('list', v ? { area: v } : {}); },
+  },
+  h('option', { value: '' }, '絞り込み：すべて'),
+  h('optgroup', { label: '用途' }, areaNames().map((a) => h('option', { value: a }, a))));
+  pick.value = areaFilter || '';
+
   container.replaceChildren(h('div', { class: 'tb-list' },
     filterBar,
-    tabStrip(tab, opts.rerender),
+    h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender), pick),
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
-      tab === 'status' ? statusTab(scoped, opts) : tab === 'nodate' ? nodateTab(scoped, opts) : areaTab(scoped, opts))));
+      tab === 'status' ? statusTab(scoped, opts) : tab === 'noarea' ? noareaTab(scoped, opts) : areaTab(scoped, opts))));
 }
