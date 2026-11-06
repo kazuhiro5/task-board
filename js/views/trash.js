@@ -4,7 +4,7 @@
 // 30日より前に消したものは、起動時に store が完全に消す。
 import { getTrash, restoreTask, purgeTask } from '../store.js';
 import { toKey } from '../dates.js';
-import { h, areaMark, md, backButton } from './card.js';
+import { h, areaMark, md } from './card.js';
 import { showToast } from '../toast.js';
 
 let armedId = null; // 「完全に消す」を1回押したタスク
@@ -56,7 +56,6 @@ export function renderTrash(container, _tasks, opts) {
   });
 
   container.replaceChildren(h('div', { class: 'tb-trash' },
-    h('div', { class: 'tb-sub-top' }, backButton(opts)),
     h('div', { class: 'tb-trash-head' },
       h('button', { type: 'button', class: 'tb-btn tb-back', onclick: () => opts.navigate('today', {}) }, '‹ 今日へ'),
       h('p', { class: 'tb-empty' }, '消したタスクは30日たつと完全に消えます')),

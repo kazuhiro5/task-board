@@ -92,7 +92,7 @@ function areaTab(scoped, opts) {
     })));
   const sections = [...buckets.entries()].map(([v, items]) =>
     group('area', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
-  return [bar, sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
+  return [bar, sections.length ? h('div', { class: 'tb-groups is-rows' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
 }
 
 // 日付なしタブ：やる日も締切も無い未完了。中身の無い用途は出さない
@@ -102,7 +102,7 @@ function nodateTab(scoped, opts) {
     .filter(([, items]) => items.length)
     .map(([v, items]) => group('nodate', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
   return [sections.length
-    ? h('div', { class: 'tb-groups' }, sections)
+    ? h('div', { class: 'tb-groups is-rows' }, sections)
     : h('p', { class: 'tb-empty' }, '日付の無いタスクはありません')];
 }
 

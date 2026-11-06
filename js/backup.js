@@ -46,8 +46,9 @@ export async function writeBackup() {
   }
 }
 
-// バックアップを読み込む：ファイルを選ぶ → 中身の件数をお知らせに出し「読み込む」を押した時だけ書く。
-// 確認の画面（confirm）は使わない（このアプリでは使わない決まり）。同じ id は上書き、無いものは消さない
+// バックアップを読み込む：ファイルを選ぶ → 画面の真ん中に件数と注意を出し、「読み込む」を押した時だけ書く。
+// 確認には confirm() を使わず、このアプリの中の小さな画面（dialog）を出す（confirm は使わない決まり）。
+// 同じ id は上書き、ファイルに無いものは消さない
 export function readBackup() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -64,21 +65,57 @@ export function readBackup() {
       showToast(`読み込めませんでした（${e.message || e}）`);
       return;
     }
-    const when = info.exportedAt ? new Date(info.exportedAt) : null;
-    const whenText = when && !isNaN(when) ? `${when.getMonth() + 1}/${when.getDate()}の` : '';
-    showToast(`${whenText}バックアップ：タスク${info.tasks}件・リンク${info.links}件。同じタスクはバックアップの中身で上書きし、後から直した所は消えます。読み込んだ後は「元に戻す」で戻せません`, {
-      action: '読み込む',
-      ms: 15000,
-      onAction: () => {
-        try {
-          const r = importData(data);
-          r.done.catch((e) => showToast(`一部を保存できませんでした（${e.message || e}）`));
-          showToast(`読み込みました（タスク${r.tasks}件・リンク${r.links}件）`);
-        } catch (e) {
-          showToast(`読み込めませんでした（${e.message || e}）`);
-        }
-      },
+    askImport(info, () => {
+      try {
+        const r = importData(data);
+        r.done.catch((e) => showToast(`一部を保存できませんでした（${e.message || e}）`));
+        showToast(`読み込みました（タスク${r.tasks}件・リンク${r.links}件）`);
+      } catch (e) {
+        showToast(`読み込めませんでした（${e.message || e}）`);
+      }
     });
   });
   input.click();
+}
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function askImport(info, onOk) {
+  const d = new Date(info.exportedAt);
+  const when = isNaN(d) ? '日時不明' : `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const dlg = el('dialog', 'tb-confirm');
+  dlg.setAttribute('aria-labelledby', 'tbConfirmTitle');
+  const title = el('h2', 'tb-confirm-title', 'バックアップを読み込みますか');
+  title.id = 'tbConfirmTitle';
+  const counts = el('ul', 'tb-confirm-counts');
+  for (const [k, v] of [
+    ['バックアップの日時', when],
+    ['タスク', `${info.tasks}件${info.trash ? `（うちゴミ箱${info.trash}件）` : ''}`],
+    ['リンク', `${info.links}件`],
+    ['プロジェクト', `${info.projects}件`],
+  ]) {
+    const li = el('li');
+    li.append(el('span', 'tb-confirm-k', k), el('span', 'tb-confirm-v', v));
+    counts.append(li);
+  }
+  const warn = el('p', 'tb-confirm-warn', '同じタスクはバックアップの中身で上書きし、後から直した所は消えます。読み込んだ後は「元に戻す」で戻せません。');
+  const cancel = el('button', 'tb-btn', 'キャンセル');
+  cancel.type = 'button';
+  const ok = el('button', 'primary', `${info.tasks}件を読み込む`);
+  ok.type = 'button';
+  const btns = el('div', 'tb-confirm-btns');
+  btns.append(cancel, ok);
+  dlg.append(title, counts, warn, btns);
+  document.body.append(dlg);
+  const close = () => { dlg.close(); dlg.remove(); };
+  cancel.addEventListener('click', close);
+  dlg.addEventListener('cancel', (e) => { e.preventDefault(); close(); });
+  ok.addEventListener('click', () => { close(); onOk(); });
+  dlg.showModal();
+  cancel.focus(); // 誤って Enter で読み込まないよう、最初はキャンセルに置く
 }

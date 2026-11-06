@@ -121,6 +121,13 @@ button { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 8px; padding: 6px 0;
 }
 .top-title { flex: 1; min-width: 0; margin: 0; font-size: 18px; font-weight: 600; }
+/* 検索・ゴミ箱・管理画面の見出しの左の「◀」（前の画面へ）。文字や枠は付けず三角だけ */
+.top-back {
+  flex: none; display: grid; place-items: center; width: 32px; min-height: var(--tap); margin-right: -4px; padding: 0;
+  border: 0; background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+}
+.top-back:hover { color: var(--text); }
+.top-back[hidden] { display: none; }
 .top-btn {
   display: grid; place-items: center; min-width: var(--tap); min-height: var(--tap); padding: 0;
   border: 0; border-radius: var(--radius-s); background: none; color: var(--muted); cursor: pointer;
@@ -271,3 +278,17 @@ button { font: inherit; color: inherit; }
 .side .tb-adder-btn:hover { border-color: var(--line); background: var(--surface); }
 .side .tb-adder { padding: 2px 0; }
 .side .tb-adder-ok { padding: 0 8px; font-size: 13px; }
+
+/* ---- 確かめる小さな画面（バックアップの読み込み） ---- */
+.tb-confirm {
+  width: min(440px, calc(100vw - 32px)); padding: 20px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); color: var(--text); box-shadow: 0 12px 40px rgb(0 0 0 / .25);
+}
+.tb-confirm::backdrop { background: rgb(0 0 0 / .45); }
+.tb-confirm-title { margin: 0 0 12px; font-size: 17px; }
+.tb-confirm-counts { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.tb-confirm-counts li { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.tb-confirm-k { color: var(--muted); }
+.tb-confirm-v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.tb-confirm-warn { margin: 0 0 16px; font-size: 13px; color: var(--danger); line-height: 1.6; }
+.tb-confirm-btns { display: flex; justify-content: flex-end; gap: 8px; }

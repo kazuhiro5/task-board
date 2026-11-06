@@ -243,6 +243,7 @@ export function checkBackup(data) {
   if (!data || data.app !== 'task-board' || !Array.isArray(data.tasks)) throw new Error('task-board のバックアップのファイルではありません');
   return {
     tasks: data.tasks.filter((t) => t && typeof t.id === 'string' && typeof t.title === 'string').length,
+    trash: data.tasks.filter((t) => t && typeof t.id === 'string' && t.deletedAt).length,
     links: Array.isArray(data.links) ? data.links.length : 0,
     projects: Array.isArray(data.projects) ? data.projects.length : 0,
     exportedAt: data.exportedAt || '',

@@ -91,6 +91,7 @@ let addBox = null; // mountAdd の戻り値（{ contextChanged }）
 const SUB_VIEWS = ['search', 'trash', 'manageAreas', 'manageProjects'];
 let backTo = { view: 'today', params: {} };
 function goBack() { navigate(backTo.view, backTo.params); }
+$('#backBtn').addEventListener('click', goBack);
 
 function navigate(view, params = {}) {
   if (!ALL_VIEWS[view]) return;
@@ -285,6 +286,7 @@ function render() {
   renderSide();
   const p = state.params;
   $('#topTitle').textContent = p.project || p.area || ALL_VIEWS[state.view].label;
+  $('#backBtn').hidden = !SUB_VIEWS.includes(state.view);
   ALL_VIEWS[state.view].render($('#view'), store.getTasks(), {
     group: state.group,
     setGroup,

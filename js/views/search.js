@@ -2,7 +2,7 @@
 // タスク名・内容・プロジェクト・用途から探す。空白で区切ると、すべての言葉を含むものだけ。
 // 全角・半角、大文字・小文字の違いは無視する（NFKC＋小文字にそろえて比べる）。
 // 打つたびに結果だけを描き直す（画面ごと描き直すと、入力欄の文字の位置・変換中の文字が消えるため）。
-import { h, isOpen, taskCard, compareTasks, backButton } from './card.js';
+import { h, isOpen, taskCard, compareTasks } from './card.js';
 
 let query = '';
 let input = null; // 描き直しても同じ入力欄を使う
@@ -50,7 +50,7 @@ export function renderSearch(container, tasks, opts) {
   input.oninput = () => { query = input.value; box.replaceChildren(resultBox(tasks)); };
   // タスクの入力欄と同じ場所・同じ形にし、ボタンだけオレンジにして「追加」と見分ける
   const form = h('form', { class: 'add-form tb-search-form', role: 'search', autocomplete: 'off' },
-    h('div', { class: 'add-line' }, input, h('button', { type: 'submit', class: 'primary tb-search-go' }, '検索'), backButton(opts)));
+    h('div', { class: 'add-line' }, input, h('button', { type: 'submit', class: 'primary tb-search-go' }, '検索')));
   form.addEventListener('submit', (ev) => { ev.preventDefault(); query = input.value; box.replaceChildren(resultBox(tasks)); input.blur(); });
   const hadFocus = document.activeElement === input;
   const [s, e] = [input.selectionStart, input.selectionEnd];
