@@ -55,10 +55,13 @@ function group(key, v, title, items, cardOpts, extra = {}) {
   const id = `${key}:${v}`;
   const pickable = !(v === NONE || (key === 'status' && v === 'done'));
   const isPicked = picked === id;
+  const head = sectionHead(title, items.length + (extra.more || 0), pickable
+    ? { picked: isPicked, onPick: () => { picked = isPicked ? null : id; extra.rerender(); } }
+    : {});
+  // 用途の見出しには、ほかの画面と同じく用途の色の丸を付ける
+  if (key === 'area' && v !== NONE) head.querySelector('.tb-sec-title')?.before(areaDot(v));
   return h('section', { class: 'tb-sec' + (extra.cls ? ` ${extra.cls}` : ''), 'data-group-value': v === NONE ? '' : v },
-    sectionHead(title, items.length + (extra.more || 0), pickable
-      ? { picked: isPicked, onPick: () => { picked = isPicked ? null : id; extra.rerender(); } }
-      : {}),
+    head,
     h('div', { class: 'tb-cards' },
       items.map((x) => cardOpts(x)),
       extra.empty && !items.length ? h('p', { class: 'tb-empty' }, 'なし') : null,
