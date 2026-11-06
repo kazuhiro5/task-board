@@ -596,3 +596,5 @@
 .tb-filter-wrap > .tb-filter-select { max-width: 100%; }
 .tb-filter-wrap.has-dot > .tb-dot { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 10px; height: 10px; pointer-events: none; }
 .tb-filter-wrap.has-dot > .tb-filter-select { padding-left: 32px; }
+.tb-filter-pick { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.tb-filter-pick > .tb-filter-wrap { max-width: none; }

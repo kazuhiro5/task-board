@@ -5,7 +5,7 @@
 //   用途：用途ごとのグループ（大学…勉強→未設定）。「完了を表示」で完了も出す
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
 //   用途なし：用途の付いていない未完了（ほかのタブで埋もれがちなもの）。進捗ごと
-// opts.params.area があれば、その用途に絞って出す（「就活で絞り込み中 ×」で解除）。
+// opts.params.area があれば、その用途に絞って出す（絞り込みの欄の右の × で解除）。
 // 見出しを押すと「ここに追加」（入力欄の初期値をその用途・状態にする）。
 import { STATUSES } from '../constants.js';
 import { areaNames, addArea } from '../store.js';
@@ -86,7 +86,14 @@ function areaPick(opts) {
   h('option', { value: '' }, '絞り込み：すべて'),
   areaNames().map((a) => h('option', { value: a }, a)));
   pick.value = areaFilter || '';
-  return pick;
+  // 今日の絞り込みと同じ形：用途を選んでいる時は左に色の丸、右に ×（一覧に戻る）
+  if (!areaFilter) return h('span', { class: 'tb-filter-wrap' }, pick);
+  return h('span', { class: 'tb-filter-pick' },
+    h('span', { class: 'tb-filter-wrap has-dot' }, areaDot(areaFilter), pick),
+    h('button', {
+      type: 'button', class: 'tb-x', 'aria-label': '絞り込みを解除', title: '解除',
+      onclick: () => { areaFilter = null; if (opts.navigate) opts.navigate('list', {}); else opts.rerender(); },
+    }, '×'));
 }
 
 // 用途タブ
@@ -153,21 +160,12 @@ export function renderList(container, tasks, opts) {
   const ctxKey = tab === 'noarea' ? 'status' : tab;
   opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
 
-  const filterBar = areaFilter
-    ? h('div', { class: 'tb-filterbar' },
-      areaDot(areaFilter),
-      h('span', {}, `${areaFilter}で絞り込み中`),
-      h('button', {
-        type: 'button',
-        class: 'tb-x',
-        'aria-label': '絞り込みを解除',
-        onclick: () => { areaFilter = null; if (opts.navigate) opts.navigate('list', {}); else opts.rerender(); },
-      }, '×'))
-    : null;
+  // 用途タブ以外でも、絞り込み中なら同じ形で出す（ここから解除できるように）
+  const filterBar = areaFilter && tab !== 'area' ? h('div', { class: 'tb-listbar' }, areaPick(opts)) : null;
 
   container.replaceChildren(h('div', { class: 'tb-list' },
-    filterBar,
     h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender)),
+    filterBar,
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
       tab === 'status' ? statusTab(scoped, opts) : tab === 'noarea' ? noareaTab(scoped, opts) : areaTab(scoped, opts))));
 }
