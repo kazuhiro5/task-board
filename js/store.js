@@ -22,6 +22,9 @@
 //
 // 用途の一覧：users/{uid}/meta/areas に { list: [{ name, color }], updatedAt }。文書が無ければ constants.AREAS の6つ。
 //
+// リンク集：users/{uid}/links/{自動の番号} に { area, name, url, createdAt, updatedAt }。
+// 1件1文書にしている（一覧を1つの文書にまとめると、2台で同時に足した・消した時に片方が消えるため）。
+//
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
 import { todayKey, addDays } from './dates.js';
 import { normRepeat, nextDate, daysBetween } from './repeat.js';
@@ -35,6 +38,7 @@ let allTasks = []; // ゴミ箱の中も含む全部
 let tasks = []; // ゴミ箱の中を除いたもの（画面に渡す）
 let projects = new Map(); // プロジェクト名 → { phases, updatedAt }
 let areaList = null; // 用途の一覧（null＝文書なし。決まった6つとして扱う）
+let links = []; // リンク集（足した順）
 
 export const DEFAULT_PHASES = 5;
 const TRASH_DAYS = 30;
@@ -112,6 +116,52 @@ export function addArea(raw) {
   areaList = [...list, item];
   emit();
   return backend.addAreas(add);
+}
+
+// ---- リンク集 ----
+export function getLinks() {
+  return links;
+}
+
+// 入れたURLを確かめて整える。「manaba.cit.ac.jp」のように https:// が無ければ付ける。
+// http・https 以外（javascript: など）は、押した時に危ないので断る
+export function normUrl(raw) {
+  let s = String(raw || '').trim();
+  if (!s) throw new Error('URLを入れてください');
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(s)) s = `https://${s}`;
+  let u;
+  try { u = new URL(s); } catch { throw new Error('URLの形になっていません'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('http か https で始まるURLにしてください');
+  if (!u.hostname.includes('.') && u.hostname !== 'localhost') throw new Error('URLの形になっていません');
+  return u.href;
+}
+
+function linkFields({ area, name, url }) {
+  const a = String(area || '').trim();
+  if (!a) throw new Error('用途がありません');
+  const n = String(name || '').trim();
+  if (n.length > 40) throw new Error('名前は40文字までにしてください');
+  return { area: a, name: n, url: normUrl(url) };
+}
+
+// 足す。おかしい時はその場で Error を投げる（addArea と同じ）。書き込みの Promise を返す
+export function addLink(raw) {
+  const now = Date.now();
+  const data = { ...linkFields(raw), createdAt: now, updatedAt: now };
+  return backend.addLink(data);
+}
+
+export function updateLink(id, raw) {
+  const data = { ...linkFields(raw), updatedAt: Date.now() };
+  return backend.updateLink(id, data);
+}
+
+export function deleteLink(id) {
+  return backend.deleteLink(id);
+}
+
+function setLinks(list) {
+  links = list.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
 }
 
 // プロジェクトを作る（タスク0件でも一覧に出す）。同じ名前は作らない。addArea と同じくその場で Error を投げる
@@ -288,7 +338,7 @@ function chunks(ops) {
 async function firestoreBackend(uid) {
   const { db } = await import('./firebase.js');
   const {
-    collection, doc, addDoc, updateDoc, setDoc, onSnapshot, writeBatch, arrayUnion,
+    collection, doc, addDoc, updateDoc, setDoc, deleteDoc, onSnapshot, writeBatch, arrayUnion,
   } = await import('https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js');
   const col = collection(db, 'users', uid, 'tasks');
   const unsub = onSnapshot(col, { includeMetadataChanges: false }, (snap) => {
@@ -318,6 +368,12 @@ async function firestoreBackend(uid) {
       : null;
     emit();
   });
+  // リンク集
+  const lcol = collection(db, 'users', uid, 'links');
+  const unsubL = onSnapshot(lcol, (snap) => {
+    setLinks(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    emit();
+  });
   return {
     add: (t) => addDoc(col, t).then((r) => r.id),
     update: (id, p) => updateDoc(doc(col, id), p),
@@ -335,7 +391,10 @@ async function firestoreBackend(uid) {
     setProject: (name, data) => setDoc(doc(pcol, projectDocId(name)), data, { merge: true }),
     // 一覧を丸ごと上書きしない（2台で同時に足しても両方残る。オフラインでも書ける）
     addAreas: (items) => setDoc(areasRef, { list: arrayUnion(...items), updatedAt: Date.now() }, { merge: true }),
-    stop: () => { unsub(); unsubP(); unsubA(); },
+    addLink: (data) => addDoc(lcol, data).then((r) => r.id),
+    updateLink: (id, data) => updateDoc(doc(lcol, id), data),
+    deleteLink: (id) => deleteDoc(doc(lcol, id)),
+    stop: () => { unsub(); unsubP(); unsubA(); unsubL(); },
   };
 }
 
@@ -363,6 +422,11 @@ function demoBackend() {
   ]);
   projects = new Map();
   areaList = null;
+  setLinks([
+    { id: 'demoL1', area: '大学', name: 'manaba', url: 'https://manaba.cit.ac.jp/', createdAt: 1 },
+    { id: 'demoL2', area: '大学', name: '', url: 'https://portal.it-chiba.ac.jp/', createdAt: 2 },
+    { id: 'demoL3', area: '就活', name: 'OfferBox', url: 'https://offerbox.jp/', createdAt: 3 },
+  ]);
   const apply = (o) => {
     if (o.type === 'set') { setAll([...allTasks.filter((x) => x.id !== o.id), { ...o.data, id: o.id }]); return; }
     if (o.type === 'delete') { setAll(allTasks.filter((x) => x.id !== o.id)); return; }
@@ -374,6 +438,9 @@ function demoBackend() {
     batch: async (ops) => { for (const o of ops) apply(o); emit(); },
     setProject: async (name, data) => { projects = new Map(projects).set(name, { phases: data.phases, updatedAt: data.updatedAt }); emit(); },
     addAreas: async () => { emit(); },
+    addLink: async (data) => { const id = `demoL${++n}`; setLinks([...links, { ...data, id }]); emit(); return id; },
+    updateLink: async (id, data) => { setLinks(links.map((x) => (x.id === id ? { ...x, ...data } : x))); emit(); },
+    deleteLink: async (id) => { setLinks(links.filter((x) => x.id !== id)); emit(); },
     stop: () => {},
   };
 }
@@ -395,5 +462,6 @@ export function stop() {
   setAll([]);
   projects = new Map();
   areaList = null;
+  links = [];
   emit();
 }

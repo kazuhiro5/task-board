@@ -443,3 +443,25 @@
 @media (min-width: 840px) {
   .tb-narrow-only { display: none; }
 }
+
+/* ---- リンク集（views/links.js） ---- */
+.tb-links > .tb-empty { margin: 0 0 10px; }
+.tb-link-sec { display: grid; gap: 6px; align-content: start; }
+.tb-link-head { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 14px; font-weight: 600; }
+.tb-link-count { font-size: 12px; font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tb-link-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.tb-link-item { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tb-link-item.is-editing { display: block; }
+.tb-link {
+  flex: 1; min-width: 0; min-height: var(--tap); display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface);
+  color: var(--text); text-decoration: none;
+}
+.tb-link:hover { border-color: var(--accent); }
+.tb-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tb-link-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-link-host { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+.tb-link-out { margin-left: auto; flex: none; color: var(--muted); }
+.tb-link-edit { flex: none; font-size: 13px; }
+.tb-link-form { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface); }
+.tb-link-del { margin-left: auto; }

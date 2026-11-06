@@ -14,6 +14,7 @@ import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
 import { renderTrash } from './views/trash.js';
+import { renderLinks } from './views/links.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -22,6 +23,7 @@ const ICONS = {
   list: '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   projects: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   project: '<path d="M4 6h16M4 12h10M4 18h7"/>',
+  links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 };
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`;
 
@@ -30,6 +32,7 @@ const VIEWS = {
   week: { label: '週', render: renderWeek },
   projects: { label: 'プロジェクト', render: renderProjects },
   list: { label: '一覧', render: renderList },
+  links: { label: 'リンク集', render: renderLinks },
 };
 // タブ・左の一覧に出さない画面（⋯メニューから開く）。開いた画面としては保存しない
 const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash } };
