@@ -54,6 +54,26 @@
 .tag-newproject { font-size: 16px; flex: 1 1 10em; }
 .tag-memo { width: 100%; padding: 8px 12px; font-size: 16px; resize: vertical; line-height: 1.5; }
 
+/* タグは1行に1種類（PC・スマホとも）。折り返さず横に流して縦の幅を取らない。
+   右端を薄く消して、続きがあることを見せる（横に流せると気づかれにくいため）。PCはホイールでも動く（add.js） */
+.add .tag-row { align-items: center; gap: 6px; }
+.add .tag-label { width: 6em; line-height: 1.3; }
+.add .tag-row > .tag-chips {
+  flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+  padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+}
+.add .tag-row > .tag-chips::-webkit-scrollbar { display: none; }
+.add .tag-row .chip { flex: none; max-width: none; }
+.add .tag-row .tag-newproject { flex: 0 0 10em; }
+/* プロジェクトは選ぶ欄 */
+.tag-select {
+  font: inherit; font-size: 16px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  min-height: var(--tap); padding: 0 8px; flex: 0 1 14em; min-width: 0; max-width: 100%;
+}
+.tag-select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+
 .add-close {
   background: none; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--text);
   min-height: var(--tap); padding: 0 14px; cursor: pointer;
@@ -88,24 +108,11 @@
   .add-memo { order: 9; }
   .add-error { order: 8; }
   .add.is-open { box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
-  /* タグは1行に1種類。折り返さず横に流して縦の幅を取らない。
-     右端を薄く消して、続きがあることを見せる（横に流せると気づかれにくいため） */
-  .tag-row { align-items: center; gap: 6px; }
-  .tag-label { width: 4.2em; line-height: 1.3; white-space: normal; }
-  .tag-row > .tag-chips {
-    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
-    padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
-  }
-  .tag-row > .tag-chips::-webkit-scrollbar { display: none; }
-  .tag-row .chip { flex: none; max-width: none; }
-  .tag-row .tag-newproject { flex: 0 0 10em; }
   .add-memo { min-height: 0; }
 }
 @media (min-width: 840px) {
   .add { margin-top: 4px; }
-  /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅）。タグは折り返して並べる
-     （PCのマウスでは横に流す操作がしにくく、隠れた選択肢に気づかれにくいため） */
+  /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅） */
   .add.is-open .add-form {
     position: fixed; inset: 0 0 0 auto; z-index: 30;
     width: var(--detail-w); max-width: 100vw; height: 100dvh;
@@ -125,9 +132,6 @@
     content: '右のパネルで入力中'; display: grid; place-items: center;
     border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: 13px;
   }
-  .add.is-open .tag-row { flex-direction: column; gap: 2px; }
-  .add.is-open .tag-label { width: auto; line-height: 1.4; }
-  .add.is-open .tag-chips { width: 100%; }
   /* 一覧の右端がパネルに隠れないよう、開いている間はずらす（編集のパネルと同じ） */
   body.has-add #appRoot { padding-right: calc(var(--detail-w) + 16px); }
 }

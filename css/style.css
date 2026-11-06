@@ -32,7 +32,7 @@
   --radius-s: 6px;  /* ボタン・入力 */
   --gap: 12px;
   --tap: 40px; /* 指で押しやすい最小の高さ */
-  --side-w: 220px;      /* PCの左の一覧 */
+  --side-w: 236px;      /* PCの左の一覧 */
   --tabbar-h: 56px;     /* スマホの下のタブ（iPhoneの下の余白は別に足す） */
   --addbar-h: 62px;     /* スマホの下の入力欄（1行目）の高さの目安 */
   color-scheme: light;
@@ -223,7 +223,7 @@ button { font: inherit; color: inherit; }
   .side {
     display: block; position: sticky; top: 0; align-self: start;
     height: 100vh; height: 100dvh; overflow-y: auto;
-    padding: 12px 8px 24px; border-right: 1px solid var(--line);
+    padding: 14px 14px 24px; border-right: 1px solid var(--line);
   }
   .main { padding: 0 24px 40px; }
   .top { padding: 10px 0; }

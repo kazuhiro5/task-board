@@ -4,7 +4,7 @@
 // タグは行ごとに1つだけ選べる（もう一度押すと解除）。何も選ばなければ受信箱に入る（store側）。
 // 初期値は getContext() から作る。手で触っていない行は、フォーカスした時・追加する瞬間に読み直す
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
-// フェーズの行は、プロジェクトの中にいる時（getContext() に project がある時）だけ出す。初期値は getContext().phase。
+// フェーズの行は、プロジェクトを選んでいる時だけ出す。初期値は getContext().phase。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
 import { addTask, projectNames, getPhases, areaNames, subscribe } from './store.js';
 import { PRIORITIES, STATUSES } from './constants.js';
@@ -12,7 +12,7 @@ import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor } from './repeat.js';
 
 const KEYS = ['doDate', 'dueDate', 'area', 'project', 'phase', 'priority'];
-const MAX_PROJECTS = 6;
+const NEW = '\u0000new'; // プロジェクトの選択肢の「＋ 新しいプロジェクト」（ふつうの名前とぶつからない値）
 
 function el(tag, props = {}, children = []) {
   const e = document.createElement(tag);
@@ -171,47 +171,56 @@ export function mountAdd(container, getContext) {
     return row('フェーズ', opts.map((v) => chip(String(v), sel.phase === v, () => pick('phase', v))));
   }
 
+  // プロジェクトは数が増えるので、ボタンを並べず「選ぶ」欄にする（最後に「＋ 新しいプロジェクト」）
   function projectRow() {
-    const names = projectNames().slice(0, MAX_PROJECTS);
-    if (sel.project && !names.includes(sel.project)) names.unshift(sel.project);
-    const chips = names.map((v) => chip(v, sel.project === v && !newProject, () => { newProject = false; pick('project', v); }));
-    chips.push(chip('＋新規', newProject, () => {
-      newProject = !newProject;
-      if (!newProject) sel.project = null;
-      touched.add('project');
-      renderTags();
-      if (newProject) tags.querySelector('.tag-newproject')?.focus();
-    }));
+    const names = projectNames();
+    const custom = sel.project && !names.includes(sel.project);
+    const select = el('select', {
+      class: 'tag-select', 'aria-label': 'プロジェクト',
+      onchange: (e) => {
+        const v = e.target.value;
+        newProject = v === NEW;
+        sel.project = newProject || !v ? null : v;
+        sel.phase = null; // フェーズはプロジェクトごとに違うので選び直す
+        touched.add('project');
+        touched.add('phase');
+        renderTags();
+        if (newProject) tags.querySelector('.tag-newproject')?.focus();
+      },
+    }, [
+      el('option', { value: '', text: 'プロジェクトを選択' }),
+      ...names.map((v) => el('option', { value: v, text: v })),
+      el('option', { value: NEW, text: '＋ 新しいプロジェクト' }),
+    ]);
+    select.value = newProject || custom ? NEW : (sel.project || '');
     let extra = null;
-    if (newProject) {
+    if (newProject || custom) {
       extra = el('input', {
         type: 'text', class: 'tag-newproject', placeholder: 'プロジェクト名', 'aria-label': '新しいプロジェクト名',
-        value: names.includes(sel.project) ? '' : (sel.project || ''),
+        value: custom ? sel.project : '',
         oninput: (e) => { sel.project = e.target.value.trim() || null; touched.add('project'); },
         onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); form.requestSubmit(); } },
       });
     }
-    return row('プロジェクト', chips, extra);
+    return row('プロジェクト', [select], extra);
   }
 
   function renderTags() {
     const t = todayKey();
+    // 並びはオーナーが決めた順。1種類を1行にして横に流し、縦の幅を取らない
     tags.replaceChildren(
-      dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]], true),
       simpleRow('area', '用途', areaNames()),
-    );
-    const ctxProject = readContext().project;
-    if (ctxProject) tags.append(phaseRow(ctxProject));
-    // 「もっと」で隠さず全部出す。1行ずつにまとめて縦の幅を取らない（スマホは行ごとに横へ流す）
-    tags.append(
+      dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]], true),
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
-      projectRow(),
-      simpleRow('priority', '優先度', PRIORITIES),
       el('div', { class: 'tag-row' }, [
         el('span', { class: 'tag-label', text: '繰り返し' }),
         repeatEditor({ value: repeat, base: () => sel.doDate, onChange: (r) => { repeat = r; } }),
       ]),
+      projectRow(),
     );
+    if (sel.project && projectNames().includes(sel.project)) tags.append(phaseRow(sel.project));
+    tags.append(simpleRow('priority', '優先度', PRIORITIES));
+    for (const c of tags.querySelectorAll('.tag-chips')) wheelSideways(c);
   }
 
   // 開閉：入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc／「閉じる」で畳む（1行目だけ残る）。
@@ -262,7 +271,7 @@ export function mountAdd(container, getContext) {
     const data = { title: name };
     for (const k of KEYS) if (sel[k]) data[k] = sel[k];
     // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
-    if (!ctx.project || !data.project) delete data.phase;
+    if (!data.project) delete data.phase;
     if (memo.trim()) data.memo = memo.trim();
     if (repeat) data.repeat = repeat;
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;
@@ -285,7 +294,7 @@ export function mountAdd(container, getContext) {
   // 用途・プロジェクトが足されたら描き直す（入力欄の中で打っている時は描き直さない＝打った文字が消えないように）
   let listSig = '';
   subscribe(() => {
-    const sig = `${areaNames().join('')}${projectNames().slice(0, MAX_PROJECTS).join('')}`;
+    const sig = `${areaNames().join('')}${projectNames().join('')}`;
     if (sig === listSig) return;
     const first = !listSig;
     listSig = sig;
@@ -302,6 +311,15 @@ export function mountAdd(container, getContext) {
       renderTags();
     },
   };
+}
+
+// マウスのホイール（縦）で、横に流したタグを動かす。PCのマウスには横に動かす操作がほぼ無いため
+function wheelSideways(box) {
+  box.addEventListener('wheel', (e) => {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || box.scrollWidth <= box.clientWidth) return;
+    e.preventDefault();
+    box.scrollLeft += e.deltaY;
+  }, { passive: false });
 }
 
 // スマホ：キーボードが出た時、下に固定した入力欄をキーボードのすぐ上に合わせる。
