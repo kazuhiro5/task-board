@@ -15,6 +15,7 @@ import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
 import { renderTrash } from './views/trash.js';
 import { renderLinks, mountLinkAdd } from './views/links.js';
+import { writeBackup, lastBackupLabel } from './backup.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -246,6 +247,16 @@ function renderThemeOpts() {
 document.addEventListener('pointerdown', (e) => {
   const d = document.querySelector('details.user[open]');
   if (d && !d.contains(e.target)) d.open = false;
+});
+
+// ⋯メニューの「バックアップを書き出す」
+function showBackupLast() { $('#backupLast').textContent = lastBackupLabel(); }
+showBackupLast();
+$('#backupBtn').addEventListener('click', async () => {
+  const d = document.querySelector('details.user');
+  if (d) d.open = false;
+  await writeBackup();
+  showBackupLast();
 });
 
 // ⋯メニューの「ゴミ箱」

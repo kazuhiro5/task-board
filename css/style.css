@@ -131,6 +131,8 @@ button { font: inherit; color: inherit; }
   border-radius: var(--radius); padding: 10px; display: grid; gap: 10px; min-width: 240px;
   font-size: 14px; color: var(--muted); box-shadow: 0 6px 20px rgb(0 0 0 / .12);
 }
+.backup-last { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.backup-last:empty { display: none; }
 .user-menu > button {
   min-height: var(--tap); border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius-s); cursor: pointer;
 }

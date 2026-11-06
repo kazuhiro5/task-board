@@ -118,6 +118,20 @@ export function addArea(raw) {
   return backend.addAreas(add);
 }
 
+// ---- バックアップ ----
+// 端末に書き出す中身。ゴミ箱の中のタスクも入れる（ゴミ箱から戻したくなった時のため）。id も残す
+export function exportData() {
+  return {
+    app: 'task-board',
+    format: 1,
+    exportedAt: new Date().toISOString(),
+    tasks: allTasks,
+    projects: [...projects.entries()].map(([name, x]) => ({ name, ...x })),
+    areas: getAreas(),
+    links,
+  };
+}
+
 // ---- リンク集 ----
 export function getLinks() {
   return links;
