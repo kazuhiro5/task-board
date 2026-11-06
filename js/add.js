@@ -63,7 +63,9 @@ export function mountAdd(container, getContext) {
     class: 'tag-memo add-memo', rows: '2', placeholder: '内容', 'aria-label': '内容',
     oninput: (e) => { memo = e.target.value; },
   });
-  form.append(head, el('div', { class: 'add-line' }, [title, submit]), memoBox);
+  // 優先度は内容のすぐ下に置く（オーナーが決めた位置。ほかのタグとは別の場所）
+  const prioBox = el('div', { class: 'add-prio' });
+  form.append(head, el('div', { class: 'add-line' }, [title, submit]), memoBox, prioBox);
 
   const error = el('p', { class: 'add-error', role: 'alert' });
   const tags = el('div', { class: 'add-tags' });
@@ -219,8 +221,8 @@ export function mountAdd(container, getContext) {
       projectRow(),
     );
     if (sel.project && projectNames().includes(sel.project)) tags.append(phaseRow(sel.project));
-    tags.append(simpleRow('priority', '優先度', PRIORITIES));
-    for (const c of tags.querySelectorAll('.tag-chips')) wheelSideways(c);
+    prioBox.replaceChildren(simpleRow('priority', '優先度', PRIORITIES));
+    for (const c of form.querySelectorAll('.tag-chips')) if (!c.dataset.wheel) { c.dataset.wheel = '1'; wheelSideways(c); }
   }
 
   // 開閉：入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc／「閉じる」で畳む（1行目だけ残る）。

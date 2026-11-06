@@ -86,7 +86,8 @@
 /* ---- 開閉（スマホ・PC共通）：ふだんは1行目（タスク名＋追加）だけ。入力欄を押すと .is-open でタグを開く ----
    （PCも 2026-10-29 オーナー：ずっと出ているとそれがメインに見え、タスクを見たいだけの時に情報が多い） */
 .add:not(.is-open) .add-tags,
-.add:not(.is-open) .add-memo { display: none; }
+.add:not(.is-open) .add-memo,
+.add:not(.is-open) .add-prio { display: none; }
 
 /* ---- スマホ：入力欄を画面の下（タブのすぐ上）に固定 ----
    タグは1行目の上に開く。
@@ -103,10 +104,11 @@
     max-height: calc(var(--vvh, 100dvh) - var(--tabbar-h) - 80px); overflow-y: auto; overscroll-behavior: contain;
   }
   .kb-open .add-form { max-height: calc(var(--vvh, 100dvh) - 70px); }
-  /* 1行目を一番下に置き、内容はそのすぐ上、タグはさらに上に開く */
+  /* 1行目を一番下に置き、その上に優先度・内容、タグはさらに上に開く（優先度はどの幅でも内容のすぐ下） */
   .add-line { order: 10; position: sticky; bottom: 0; background: var(--bg); }
-  .add-memo { order: 9; }
-  .add-error { order: 8; }
+  .add-prio { order: 9; }
+  .add-memo { order: 8; }
+  .add-error { order: 7; }
   .add.is-open { box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
   .add-memo { min-height: 0; }
 }
