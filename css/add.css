@@ -55,17 +55,18 @@
 .tag-memo { width: 100%; padding: 8px 12px; font-size: 16px; resize: vertical; line-height: 1.5; }
 
 /* タグは1行に1種類（PC・スマホとも）。折り返さず横に流して縦の幅を取らない。
-   右端を薄く消して、続きがあることを見せる（横に流せると気づかれにくいため）。PCはホイールでも動く（add.js） */
-.add .tag-row { align-items: center; gap: 6px; }
-.add .tag-label { width: 6em; line-height: 1.3; }
-.add .tag-row > .tag-chips {
+   右端を薄く消して、続きがあることを見せる（横に流せると気づかれにくいため）。PCはホイールでも動く（add.js）。
+   #add だけに効かせる（リンク集の入力欄（#linkAdd）も .add で、URLの欄が狭くなったため） */
+#add .tag-row { align-items: center; gap: 6px; }
+#add .tag-label { width: 6em; line-height: 1.3; }
+#add .tag-row > .tag-chips {
   flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
   padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
-.add .tag-row > .tag-chips::-webkit-scrollbar { display: none; }
-.add .tag-row .chip { flex: none; max-width: none; }
-.add .tag-row .tag-newproject { flex: 0 0 10em; }
+#add .tag-row > .tag-chips::-webkit-scrollbar { display: none; }
+#add .tag-row .chip { flex: none; max-width: none; }
+#add .tag-row .tag-newproject { flex: 0 0 10em; }
 /* プロジェクトは選ぶ欄 */
 .tag-select {
   font: inherit; font-size: 16px; color: var(--text); background: var(--bg);
