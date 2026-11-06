@@ -43,7 +43,6 @@ export function mountAdd(container, getContext) {
   let repeat = null; // 繰り返し（js/repeat.js の形）
   let touched = new Set(); // 前回の初期化の後に、手で触った行（KEYS のどれか）
   let lastAdd = 0; // 連打で空の追加になった時、エラーを出さないため
-  let open = false; // 「もっと」を開いているか
   let newProject = false; // プロジェクト「＋新規」の入力欄を出しているか
   const customDate = { doDate: false, dueDate: false }; // 「日付…」の入力欄を出しているか
 
@@ -53,16 +52,22 @@ export function mountAdd(container, getContext) {
     name: 'title', class: 'add-title', placeholder: 'タスクを追加', 'aria-label': 'タスク名', enterkeyhint: 'done',
   });
   const submit = el('button', { type: 'submit', class: 'primary add-submit', text: '追加' });
-  form.append(el('div', { class: 'add-line' }, [title, submit]));
+  // PCの右のパネルの見出し（スマホでは CSS で隠す）
+  const head = el('div', { class: 'add-head' }, [
+    el('span', { class: 'add-heading', text: 'タスクを追加' }),
+    el('button', { type: 'button', class: 'add-close', text: '閉じる', onclick: () => setOpen(false) }),
+  ]);
+  // 内容はタスク名のすぐ隣に置く（タグを全部出しても、名前と内容がスクロールなしで一緒に見えるように）。
+  // タグの描き直しで消えないよう、タグとは別に持つ
+  const memoBox = el('textarea', {
+    class: 'tag-memo add-memo', rows: '2', placeholder: '内容', 'aria-label': '内容',
+    oninput: (e) => { memo = e.target.value; },
+  });
+  form.append(head, el('div', { class: 'add-line' }, [title, submit]), memoBox);
 
   const error = el('p', { class: 'add-error', role: 'alert' });
   const tags = el('div', { class: 'add-tags' });
-  const more = el('div', { class: 'add-more' });
-  const moreBtn = el('button', {
-    type: 'button', class: 'add-more-btn', 'aria-expanded': 'false',
-    onclick: () => { open = !open; syncContext(); renderTags(); },
-  });
-  form.append(error, tags, moreBtn, more);
+  form.append(error, tags);
   container.appendChild(form);
 
   function readContext() {
@@ -88,6 +93,7 @@ export function mountAdd(container, getContext) {
   function resetFromContext() {
     touched = new Set();
     memo = '';
+    memoBox.value = '';
     repeat = null;
     syncContext();
     renderTags();
@@ -134,7 +140,7 @@ export function mountAdd(container, getContext) {
       touched.add(key);
       renderTags();
       if (customDate[key]) {
-        const input = tags.querySelector(`input[data-date="${key}"]`) || more.querySelector(`input[data-date="${key}"]`);
+        const input = tags.querySelector(`input[data-date="${key}"]`);
         if (input) {
           input.focus();
           try { input.showPicker(); } catch { /* 開けない端末では入力欄だけ */ }
@@ -174,7 +180,7 @@ export function mountAdd(container, getContext) {
       if (!newProject) sel.project = null;
       touched.add('project');
       renderTags();
-      if (newProject) more.querySelector('.tag-newproject')?.focus();
+      if (newProject) tags.querySelector('.tag-newproject')?.focus();
     }));
     let extra = null;
     if (newProject) {
@@ -196,20 +202,8 @@ export function mountAdd(container, getContext) {
     );
     const ctxProject = readContext().project;
     if (ctxProject) tags.append(phaseRow(ctxProject));
-
-    // 閉じていても、選択中のものがあれば分かるように件数を出す
-    const hidden = ['dueDate', 'project', 'priority'].filter((k) => sel[k]).length + (memo ? 1 : 0) + (repeat ? 1 : 0);
-    moreBtn.textContent = open ? 'たたむ ▴' : `もっと ▾${hidden ? `（${hidden}）` : ''}`;
-    moreBtn.setAttribute('aria-expanded', String(open));
-    more.hidden = !open;
-    if (!open) { more.replaceChildren(); return; }
-
-    const memoBox = el('textarea', {
-      class: 'tag-memo', rows: '2', placeholder: '内容', 'aria-label': '内容',
-      oninput: (e) => { memo = e.target.value; },
-    });
-    memoBox.value = memo;
-    more.replaceChildren(
+    // 「もっと」で隠さず全部出す。1行ずつにまとめて縦の幅を取らない（スマホは行ごとに横へ流す）
+    tags.append(
       dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
       projectRow(),
       simpleRow('priority', '優先度', PRIORITIES),
@@ -217,14 +211,20 @@ export function mountAdd(container, getContext) {
         el('span', { class: 'tag-label', text: '繰り返し' }),
         repeatEditor({ value: repeat, base: () => sel.doDate, onChange: (r) => { repeat = r; } }),
       ]),
-      row('内容', [memoBox]),
     );
   }
 
-  // 開閉（スマホ・PC共通。PCは上のまま下に開く）：
-  // 入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc で畳む（1行目だけ残る）
+  // 開閉：入力欄にフォーカス・タップで開き、入力欄の外を押す／追加した後／Esc／「閉じる」で畳む（1行目だけ残る）。
+  // PC（840px以上）は右のパネルとして開く。タスク名の欄ごとパネルへ移るので、元の場所の高さを残して本文が跳ねないようにする
   let quiet = false; // true の間はフォーカスしても開かない（Esc で戻した時）
-  function setOpen(v) { container.classList.toggle('is-open', v); }
+  const wide = window.matchMedia('(min-width: 840px)');
+  function setOpen(v) {
+    if (v === container.classList.contains('is-open')) return;
+    if (v && wide.matches) container.style.minHeight = `${container.offsetHeight}px`;
+    if (!v) container.style.minHeight = '';
+    container.classList.toggle('is-open', v);
+    document.body.classList.toggle('has-add', v && wide.matches);
+  }
   title.addEventListener('click', () => setOpen(true));
   // タグを押すと描き直されてフォーカスが body に落ちることがあるので、document で拾う
   document.addEventListener('keydown', (e) => {

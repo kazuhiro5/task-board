@@ -27,8 +27,8 @@
 .add-error { color: var(--danger); font-size: 13px; margin: 0; }
 .add-error:empty { display: none; }
 
-.add-tags,
-.add-more { display: grid; gap: 6px; min-width: 0; }
+.add-tags { display: grid; gap: 6px; min-width: 0; }
+.add-head { display: none; }
 
 .tag-row { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .tag-label {
@@ -46,7 +46,7 @@
 .chip:hover { border-color: var(--accent); }
 .chip.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 600; }
 .chip:focus-visible,
-.add-more-btn:focus-visible,
+.add-close:focus-visible,
 .edit-delete:focus-visible,
 .edit-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
@@ -54,16 +54,9 @@
 .tag-newproject { font-size: 16px; flex: 1 1 10em; }
 .tag-memo { width: 100%; padding: 8px 12px; font-size: 16px; resize: vertical; line-height: 1.5; }
 
-.add-more-btn {
-  justify-self: start; background: none; border: 0; color: var(--accent);
-  min-height: var(--tap); padding: 0 4px; cursor: pointer; font-size: 14px;
-}
-
-/* スマホ：見出しを上に載せて、チップに幅を回す */
-@media (max-width: 480px) {
-  .tag-row { flex-direction: column; gap: 2px; }
-  .tag-label { width: auto; line-height: 1.4; }
-  .tag-chips { width: 100%; }
+.add-close {
+  background: none; border: 1px solid var(--line); border-radius: var(--radius-s); color: var(--text);
+  min-height: var(--tap); padding: 0 14px; cursor: pointer;
 }
 
 /* 角丸：入力・ボタンは小さめ（--radius-s）、入力欄の枠はカード（--radius） */
@@ -73,8 +66,7 @@
 /* ---- 開閉（スマホ・PC共通）：ふだんは1行目（タスク名＋追加）だけ。入力欄を押すと .is-open でタグを開く ----
    （PCも 2026-10-29 オーナー：ずっと出ているとそれがメインに見え、タスクを見たいだけの時に情報が多い） */
 .add:not(.is-open) .add-tags,
-.add:not(.is-open) .add-more-btn,
-.add:not(.is-open) .add-more { display: none; }
+.add:not(.is-open) .add-memo { display: none; }
 
 /* ---- スマホ：入力欄を画面の下（タブのすぐ上）に固定 ----
    タグは1行目の上に開く。
@@ -91,13 +83,57 @@
     max-height: calc(var(--vvh, 100dvh) - var(--tabbar-h) - 80px); overflow-y: auto; overscroll-behavior: contain;
   }
   .kb-open .add-form { max-height: calc(var(--vvh, 100dvh) - 70px); }
-  /* 1行目を一番下に置き、タグはその上に開く */
+  /* 1行目を一番下に置き、内容はそのすぐ上、タグはさらに上に開く */
   .add-line { order: 10; position: sticky; bottom: 0; background: var(--bg); }
-  .add-error { order: 9; }
+  .add-memo { order: 9; }
+  .add-error { order: 8; }
   .add.is-open { box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
+  /* タグは1行に1種類。折り返さず横に流して縦の幅を取らない。
+     右端を薄く消して、続きがあることを見せる（横に流せると気づかれにくいため） */
+  .tag-row { align-items: center; gap: 6px; }
+  .tag-label { width: 4.2em; line-height: 1.3; white-space: normal; }
+  .tag-row > .tag-chips {
+    flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    padding-right: 24px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  .tag-row > .tag-chips::-webkit-scrollbar { display: none; }
+  .tag-row .chip { flex: none; max-width: none; }
+  .tag-row .tag-newproject { flex: 0 0 10em; }
+  .add-memo { min-height: 0; }
 }
 @media (min-width: 840px) {
   .add { margin-top: 4px; }
+  /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅）。タグは折り返して並べる
+     （PCのマウスでは横に流す操作がしにくく、隠れた選択肢に気づかれにくいため） */
+  .add.is-open .add-form {
+    position: fixed; inset: 0 0 0 auto; z-index: 30;
+    width: var(--detail-w); max-width: 100vw; height: 100dvh;
+    align-content: start; gap: 10px; overflow-y: auto; overscroll-behavior: contain;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 16px;
+    border: 0; border-left: 1px solid var(--line); border-radius: 0;
+    box-shadow: -6px 0 18px rgb(0 0 0 / .06);
+  }
+  .add.is-open .add-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 0 -16px 4px; padding: 0 16px 10px; border-bottom: 1px solid var(--line);
+  }
+  .add-heading { font-size: 17px; font-weight: 600; }
+  /* 入力欄が右へ移った後の元の場所。空白のままだと壊れて見えるので、どこで入力しているかを出す */
+  .add.is-open { display: grid; }
+  .add.is-open::before {
+    content: '右のパネルで入力中'; display: grid; place-items: center;
+    border: 1px dashed var(--line); border-radius: var(--radius); color: var(--muted); font-size: 13px;
+  }
+  .add.is-open .tag-row { flex-direction: column; gap: 2px; }
+  .add.is-open .tag-label { width: auto; line-height: 1.4; }
+  .add.is-open .tag-chips { width: 100%; }
+  /* 一覧の右端がパネルに隠れないよう、開いている間はずらす（編集のパネルと同じ） */
+  body.has-add #appRoot { padding-right: calc(var(--detail-w) + 16px); }
+}
+@media (min-width: 840px) and (max-width: 1099px) {
+  body.has-add #appRoot { padding-right: 16px; }
+  .add.is-open .add-form { box-shadow: -10px 0 30px rgb(0 0 0 / .22); }
 }
 
 /* ---- 編集画面 ---- */

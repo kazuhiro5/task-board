@@ -159,7 +159,7 @@ function listMode(tasks, cfg, s) {
       items.length ? h('div', { class: 'tb-cards' }, items.map((x) => taskCard(x, { hide: [key] }))) : null);
   });
   return [groupBar(cfg, s),
-    sections.length ? h('div', { class: 'tb-groups' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません'),
+    sections.length ? h('div', { class: 'tb-groups' + (cfg.scope === 'project' ? ' is-rows' : '') }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません'),
     addPhaseBtn(cfg)];
 }
 

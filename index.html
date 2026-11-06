@@ -6,8 +6,8 @@
   <title>task-board</title>
   <meta name="theme-color" content="#1A7F37">
   <script>
-    // ちらつき防止：CSSより前に、保存した明るさを <html data-theme> に付ける（なし＝端末に合わせる）
-    try { var t = localStorage.getItem('tb.theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+    // ちらつき防止：CSSより前に、保存した明るさ（<html data-theme>。なし＝端末に合わせる）と、左の一覧をたたんだか（.side-mini）を付ける
+    try { var t = localStorage.getItem('tb.theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); if (localStorage.getItem('tb.side') === 'mini') document.documentElement.classList.add('side-mini'); } catch (e) {}
   </script>
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" href="./icons/icon-180.png">

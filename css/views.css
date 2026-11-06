@@ -89,7 +89,7 @@
 .tb-link { background: none; border: 0; color: var(--accent); cursor: pointer; min-height: var(--tap); padding: 0 8px; }
 
 /* ---- 今日 ---- */
-.tb-today { max-width: 760px; }
+.tb-today { max-width: 1080px; }
 .tb-projs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
 .tb-projs-label { font-size: 12px; color: var(--muted); width: 100%; }
 .tb-chip {
@@ -153,6 +153,26 @@
   .tb-day .tb-meta { font-size: 11px; gap: 2px 6px; }
 }
 
+/* 日付なしの帯：2行で横に流す。右端を少し見切らせて、続きがあることを見せる */
+.tb-strip { margin: 0 0 14px; min-width: 0; }
+.tb-strip-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+.tb-strip-title { font-size: 13px; font-weight: 700; }
+.tb-strip-hint { font-size: 12px; color: var(--muted); margin-right: auto; }
+.tb-strip-arrow { min-width: var(--tap); padding: 0; font-size: 18px; }
+.tb-strip-cards.tb-cards {
+  display: grid; grid-template-rows: repeat(2, auto); grid-auto-flow: column;
+  grid-auto-columns: minmax(200px, 240px); gap: 6px; align-items: start;
+  overflow-x: auto; overscroll-behavior-x: contain; padding: 0 0 6px; scroll-snap-type: x proximity;
+}
+.tb-strip-cards > .tb-card { scroll-snap-align: start; font-size: 13px; }
+.tb-strip-cards.is-all {
+  grid-template-rows: none; grid-auto-flow: row; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); overflow: visible;
+}
+@container tb (max-width: 519.98px) {
+  .tb-strip-hint, .tb-strip-arrow { display: none; }
+  .tb-strip-cards.tb-cards { grid-auto-columns: 72%; }
+}
+
 /* ---- 一覧 ---- */
 .tb-listbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
 .tb-seg {
@@ -169,6 +189,11 @@
   .tb-seg { flex: 0 1 460px; }
   .tb-groups { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); align-items: start; }
 }
+/* プロジェクトの中のリスト：フェーズを列に分けず、行を横いっぱいに伸ばしてフェーズごとに区切る
+   （列に分けると、件数の多いフェーズだけが縦に長くなり、後ろのフェーズが見えにくい） */
+.tb-groups.is-rows { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.tb-groups.is-rows > .tb-sec { margin: 0; padding: 10px 0 14px; }
+.tb-groups.is-rows > .tb-sec + .tb-sec { border-top: 1px solid var(--line); }
 .tb-card { flex-wrap: wrap; }
 .tb-err {
   flex: 1 0 100%; margin: 0; padding: 4px 10px 6px 40px; font-size: 12px; color: var(--danger);

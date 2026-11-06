@@ -24,6 +24,8 @@ const ICONS = {
   list: '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
   projects: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   project: '<path d="M4 6h16M4 12h10M4 18h7"/>',
+  sideClose: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M16 10l-2 2 2 2"/>',
+  sideOpen: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M14 10l2 2-2 2"/>',
   links: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.2 1.2"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.2-1.2"/>',
 };
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`;
@@ -111,6 +113,7 @@ function renderTabbar() {
 function sideItem({ active, onclick, html, label, count }) {
   const b = el('button', {
     type: 'button', class: 'side-item' + (active ? ' is-active' : ''), 'aria-current': active ? 'page' : null, onclick,
+    title: label, // たたんだ時は文字が隠れるので、マウスを載せると名前が出るように
   }, html);
   b.appendChild(el('span', { class: 'side-name', text: label }));
   // 件数（未完了の数）。読み上げでは「3件」と読む
@@ -164,7 +167,20 @@ function renderSide() {
     label: '＋ プロジェクトを追加', placeholder: 'プロジェクトの名前', onAdd: store.addProject, rerender: render,
   }));
 
-  $('#side').replaceChildren(el('div', { class: 'side-brand', text: 'task-board' }), views, areas, projs);
+  const mini = document.documentElement.classList.contains('side-mini');
+  const toggle = el('button', {
+    type: 'button', class: 'side-toggle', 'aria-expanded': String(!mini),
+    'aria-label': mini ? '左の一覧をひらく' : '左の一覧をたたむ', title: mini ? 'ひらく' : 'たたむ',
+    onclick: () => {
+      const next = !document.documentElement.classList.contains('side-mini');
+      document.documentElement.classList.toggle('side-mini', next);
+      if (next) savePref('side', 'mini'); else removePref('side');
+      renderSide();
+    },
+  }, icon(mini ? 'sideOpen' : 'sideClose'));
+  const brand = el('div', { class: 'side-brand' });
+  brand.append(el('span', { class: 'side-brand-name', text: 'task-board' }), toggle);
+  $('#side').replaceChildren(brand, views, areas, projs);
 }
 
 // 画面から呼ぶ：今開いている分類を入力欄の初期値にする（例：{ area: '就活' }）

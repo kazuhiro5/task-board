@@ -174,7 +174,25 @@ button { font: inherit; color: inherit; }
 
 /* ---- 左の一覧（PC） ---- */
 .side { display: none; }
-.side-brand { font-size: 15px; font-weight: 600; padding: 6px 10px 12px; }
+.side-brand { display: flex; align-items: center; gap: 4px; font-size: 15px; font-weight: 600; padding: 0 0 8px 10px; min-height: var(--tap); }
+.side-brand-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-toggle {
+  flex: none; display: grid; place-items: center; width: var(--tap); height: var(--tap);
+  border: 0; border-radius: var(--radius-s); background: none; color: var(--muted); cursor: pointer;
+}
+.side-toggle svg { width: 20px; height: 20px; }
+.side-toggle:hover { background: var(--surface); color: var(--text); }
+/* たたんだ時：アイコンと用途の点だけ残す（名前はマウスを載せると出る） */
+.side-mini .side { padding-left: 6px; padding-right: 6px; }
+.side-mini .side-brand { padding-left: 0; justify-content: center; }
+.side-mini .side-brand-name,
+.side-mini .side-name,
+.side-mini .side-count,
+.side-mini .side-label,
+.side-mini .side-empty,
+.side-mini .side .tb-adder,
+.side-mini .side .tb-adder-btn { display: none; }
+.side-mini .side-item { justify-content: center; padding: 0; }
 .side-sec { display: grid; gap: 2px; margin-bottom: 16px; }
 .side-label { font-size: 12px; color: var(--muted); padding: 0 10px 4px; font-weight: 600; }
 .side-item {
@@ -198,10 +216,10 @@ button { font: inherit; color: inherit; }
 
 @media (min-width: 840px) {
   .tabbar { display: none; }
-  .shell {
-    display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr);
-    max-width: 1280px; margin: 0 auto;
-  }
+  /* 左の一覧は画面の左端に付け、本文を広く使う。広い画面で行が長くなりすぎないよう、本文だけに上限を付ける */
+  .shell { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
+  .side-mini { --side-w: 60px; }
+  .main { max-width: 1480px; }
   .side {
     display: block; position: sticky; top: 0; align-self: start;
     height: 100vh; height: 100dvh; overflow-y: auto;
