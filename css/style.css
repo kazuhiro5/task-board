@@ -233,7 +233,7 @@ button { font: inherit; color: inherit; }
 .side-row.is-dragging { opacity: .5; background: var(--accent-weak); }
 
 
-/* スマホ：下のタブと入力欄のぶん、本文の下に余白 */
+/* スマホ：下のタブと入力欄（リンク集）・＋ のぶん、本文の下に余白 */
 @media (max-width: 839.98px) {
   .shell { padding-bottom: calc(var(--tabbar-h) + var(--addbar-h) + 24px + env(safe-area-inset-bottom)); }
 }

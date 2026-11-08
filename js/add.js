@@ -253,7 +253,16 @@ export function mountAdd(container, getContext) {
     if (!v) container.style.minHeight = '';
     container.classList.toggle('is-open', v);
     document.body.classList.toggle('has-add', v && wide.matches);
+    document.body.classList.toggle('has-add-pop', v && !wide.matches);
   }
+  // スマホ：ふだんは右下の ＋ だけ。押すと画面の上にカードで開く。
+  // 下に固定した入力欄は、開くとキーボードと重なって見づらかったため、キーボードの出ない上側に出す。
+  // ＋ は入力欄の中に置く（外を押したら閉じる仕組みで、＋ を押した瞬間に閉じないように）
+  const fab = el('button', {
+    type: 'button', class: 'add-fab', 'aria-label': 'タスクを追加',
+    onclick: () => { syncContext(); renderTags(); setOpen(true); title.focus(); },
+  }, [el('span', { text: '＋', 'aria-hidden': 'true' })]);
+  container.append(fab);
   title.addEventListener('click', () => setOpen(true));
   // タグを押すと描き直されてフォーカスが body に落ちることがあるので、document で拾う
   document.addEventListener('keydown', (e) => {
@@ -302,7 +311,9 @@ export function mountAdd(container, getContext) {
     lastAdd = Date.now();
     resetFromContext();
     title.focus();
-    setOpen(false); // 続けて入れられるようにフォーカスは残し、タグだけ畳む（もう一度押すと開く）
+    // 続けて入れられるようにフォーカスは残し、タグだけ畳む（もう一度押すと開く）。
+    // スマホのカードは閉じない（閉じると名前の欄も消え、続けて入れられないため）
+    if (wide.matches) setOpen(false);
     addTask(data).catch((err) => {
       error.textContent = `「${name}」を追加できませんでした（${err.message || err}）`;
     });

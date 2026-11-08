@@ -90,29 +90,47 @@
 .add:not(.is-open) .add-memo,
 .add:not(.is-open) .add-prio { display: none; }
 
-/* ---- スマホ：入力欄を画面の下（タブのすぐ上）に固定 ----
-   タグは1行目の上に開く。
+/* ---- スマホ：リンク集の入力欄は画面の下（タブのすぐ上）に固定 ----
    キーボードが出ている時（html.kb-open）は、キーボードのすぐ上（--kb は add.js が入れる）に合わせる */
 @media (max-width: 839.98px) {
-  .add {
+  #linkAdd {
     position: fixed; left: 0; right: 0; z-index: 15;
     bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
     padding: 8px 12px; background: var(--bg); border-top: 1px solid var(--line);
   }
-  .kb-open .add { bottom: var(--kb, 0px); }
-  .add-form {
-    border: 0; padding: 0; background: none;
-    max-height: calc(var(--vvh, 100dvh) - var(--tabbar-h) - 80px); overflow-y: auto; overscroll-behavior: contain;
-  }
-  .kb-open .add-form { max-height: calc(var(--vvh, 100dvh) - 70px); }
-  /* 1行目を一番下に置き、その上に優先度・内容、タグはさらに上に開く（優先度はどの幅でも内容のすぐ下） */
-  .add-line { order: 10; position: sticky; bottom: 0; background: var(--bg); }
-  .add-prio { order: 9; }
-  .add-memo { order: 8; }
-  .add-error { order: 7; }
-  .add.is-open { box-shadow: 0 -8px 24px rgb(0 0 0 / .12); }
+  .kb-open #linkAdd { bottom: var(--kb, 0px); }
+  #linkAdd .add-form { border: 0; padding: 0; background: none; }
+  #linkAdd .add-line { order: 10; }
   .add-memo { min-height: 0; }
 }
+
+/* ---- スマホ：タスクの入力は右下の ＋ から、画面の上のカードで開く ----
+   上に出すのは、下から開くとキーボードと重なって見づらいため（キーボードは下から出る） */
+.add-fab { display: none; }
+@media (max-width: 839.98px) {
+  #add { position: static; padding: 0; border: 0; }
+  #add:not(.is-open) .add-form { display: none; }
+  .add-fab {
+    display: grid; place-items: center; position: fixed; z-index: 16;
+    right: 16px; bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
+    width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--accent); color: #fff; font-size: 30px; line-height: 1;
+    box-shadow: 0 6px 18px rgb(0 0 0 / .25);
+  }
+  .add-fab:active { transform: scale(.94); }
+  #add.is-open .add-fab { display: none; }
+  #add.is-open .add-form {
+    position: fixed; z-index: 41; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top));
+    max-height: calc(var(--vvh, 100dvh) - 16px - env(safe-area-inset-top)); overflow-y: auto; overscroll-behavior: contain;
+    border-radius: 14px; padding: 12px; gap: 10px; box-shadow: 0 12px 32px rgb(0 0 0 / .3);
+  }
+  #add.is-open .add-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #add .add-heading { font-size: 15px; font-weight: 700; }
+  body.has-add-pop::after {
+    content: ''; position: fixed; inset: 0; z-index: 40; background: rgb(0 0 0 / .4);
+  }
+}
+
 @media (min-width: 840px) {
   .add { margin-top: 4px; }
   /* PC：押すと右のパネルとして開く（編集のパネルと同じ場所・同じ幅）。リンク集の入力欄（#linkAdd）は上のまま開く */
