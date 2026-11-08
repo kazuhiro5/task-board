@@ -31,7 +31,8 @@ export function enableDrag(root, cfg) {
 }
 
 const zoneOf = (el) => el.closest('[data-drop]');
-const movable = (card) => card && !card.classList.contains('is-done') && card.dataset.drag !== 'no';
+// 完了したタスクはふだん動かさない（日付や順番を変える意味が無いため）。WBS は完了したものも親子を組み替えるので cfg.allowDone で許す
+const movable = (card, cfg) => card && (cfg?.allowDone || !card.classList.contains('is-done')) && card.dataset.drag !== 'no';
 
 function onDown(e, root, cfg) {
   if (s) return;
@@ -40,7 +41,7 @@ function onDown(e, root, cfg) {
   if (!body || !root.contains(body)) return;
   const card = body.closest('.tb-card[data-id]');
   const zone = card && zoneOf(card);
-  if (!zone || !movable(card)) return;
+  if (!zone || !movable(card, cfg)) return;
   s = {
     cfg, root, card, zone,
     id: card.dataset.id,
@@ -159,7 +160,7 @@ function findTarget() {
     return;
   }
   const cards = [...hit.querySelectorAll('.tb-card[data-id]')]
-    .filter((c) => c.dataset.id !== s.id && movable(c) && zoneOf(c) === hit);
+    .filter((c) => c.dataset.id !== s.id && movable(c, s.cfg) && zoneOf(c) === hit);
   let index = cards.length;
   for (let i = 0; i < cards.length; i++) {
     const r = cards[i].getBoundingClientRect();
@@ -243,7 +244,7 @@ function onKey(e, cfg) {
   if (!e.altKey || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
   const card = e.target.closest('.tb-card[data-id]');
   const zone = card && zoneOf(card);
-  if (!zone || !movable(card)) return;
+  if (!zone || !movable(card, cfg)) return;
   e.preventDefault();
   const id = card.dataset.id;
   refocusId = id;
@@ -251,7 +252,7 @@ function onKey(e, cfg) {
     cfg.onKey?.(id, zone.dataset.drop, e.key === 'ArrowLeft' ? -1 : 1);
   } else {
     if (!zone.hasAttribute('data-drop-ok')) return;
-    const ids = [...zone.querySelectorAll('.tb-card[data-id]')].filter((c) => movable(c) && zoneOf(c) === zone).map((c) => c.dataset.id);
+    const ids = [...zone.querySelectorAll('.tb-card[data-id]')].filter((c) => movable(c, cfg) && zoneOf(c) === zone).map((c) => c.dataset.id);
     const i = ids.indexOf(id);
     const j = i + (e.key === 'ArrowUp' ? -1 : 1);
     if (i < 0 || j < 0 || j >= ids.length) return;

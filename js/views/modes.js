@@ -343,6 +343,7 @@ function wbsMode(tasks, cfg) {
     h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段の最後に')) : null;
   if (root) enableDrag(root, {
     rootSel: '.tb-wbs',
+    allowDone: true,
     onHover: (zone, x, y) => { if (zone.dataset.drop !== 'wbs:') zone.dataset.mode = modeOf(zone, x, y); },
     onDrop: ({ id, toKey, toZone, x, y }) => {
       const all = getTasks();
