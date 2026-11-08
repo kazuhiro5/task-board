@@ -598,3 +598,4 @@
 .tb-filter-wrap.has-dot > .tb-filter-select { padding-left: 32px; }
 .tb-filter-pick { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
 .tb-filter-pick > .tb-filter-wrap { max-width: none; }
+.tb-yest .tb-od-n { color: var(--muted); border-color: var(--line); } /* 振り返り用なので赤にしない */

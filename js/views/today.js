@@ -1,6 +1,6 @@
 // 画面「今日」＝今日から先の予定。担当：画面役。
 // renderToday(container, tasks, opts)：opts = { group, setGroup, setContext, rerender }
-// 上から 期限切れ → 持ち越し → 今日 → 明日 → それ以降（日付ごと） → 進行中 → 受信箱 → 今日終えたもの。
+// 上から 期限切れ → 持ち越し → 昨日のタスク → 今日 → 明日 → それ以降（日付ごと） → 進行中 → 受信箱 → 今日終えたもの。
 // 1つのタスクは上の区分の1か所だけに出す（設計書 6章）。
 // 「明日」より先は、やる日（doDate）があればその日、なければ締切（dueDate）の日に置く。
 // 引きずって動かす：「今日」「明日」「日付ごとの見出し」へ落とすと、やる日をその日に。同じ区分の中の上下は順番（order）。
@@ -49,6 +49,27 @@ function carryBox(list, opts) {
     head,
     h('div', { class: 'tb-od-body', id: 'tb-carry-body' },
       h('div', { class: 'tb-cards' }, list.map((x) => taskCard(x, { badges: ['持ち越し'] })))));
+}
+
+// 昨日のタスク：やる日が昨日だったものを、終わったものも含めて全部（昨日どこまでできたかを振り返る）。
+// 終わっていないものは持ち越し・期限切れにも出る（ここは振り返り用で、置き場ではないため。引きずって今日などへ動かせる）
+function yesterdayBox(list, opts) {
+  if (!list.length) return null;
+  const open = loadFlag('tb.yesterdayOpen');
+  const doneN = list.filter((x) => !isOpen(x)).length;
+  const head = h('h2', { class: 'tb-od-head' },
+    h('button', {
+      type: 'button', class: 'tb-od-btn tb-yest-btn', 'aria-expanded': String(open), 'aria-controls': 'tb-yest-body',
+      onclick: () => { saveFlag('tb.yesterdayOpen', !open); opts.rerender(); },
+    },
+    h('span', { class: 'tb-od-title' }, '昨日のタスク'),
+    h('span', { class: 'tb-od-n' }, `${doneN}/${list.length}件済`),
+    h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸')));
+  if (!open) return h('section', { class: 'tb-sec tb-od tb-yest', 'data-sec': 'yesterday' }, head);
+  return h('section', { class: 'tb-sec tb-od tb-yest is-open', 'data-sec': 'yesterday', 'data-drop': 'yesterday', 'data-drop-ok': false },
+    head,
+    h('div', { class: 'tb-od-body', id: 'tb-yest-body' },
+      h('div', { class: 'tb-cards' }, list.map((x) => taskCard(x, { hide: ['doDate'] })))));
 }
 
 function loadOverdueOpen() {
@@ -165,6 +186,9 @@ export function renderToday(container, tasks, opts) {
     return list;
   };
   const overdue = take((x) => x.dueDate && x.dueDate < t);
+  const yesterdayKey = addDays(t, -1);
+  const yesterday = tasks.filter((x) => !x.deletedAt && x.doDate === yesterdayKey && inScope(x))
+    .sort((a, b) => (isOpen(a) ? 0 : 1) - (isOpen(b) ? 0 : 1) || cmp(a, b));
   const carry = take((x) => x.doDate && x.doDate < t && x.dueDate !== t);
   const today = take((x) => (x.doDate && x.doDate <= t) || x.dueDate === t);
   const tmr = take((x) => placeKey(x) === tomorrow);
@@ -236,7 +260,8 @@ export function renderToday(container, tasks, opts) {
     topBar,
     chips,
     filterBar,
-    overdue.length || carry.length ? h('div', { class: 'tb-od-wrap' }, overdueBox(overdue, t, opts), carryBox(carry, opts)) : null,
+    overdue.length || carry.length || yesterday.length
+      ? h('div', { class: 'tb-od-wrap' }, overdueBox(overdue, t, opts), carryBox(carry, opts), yesterdayBox(yesterday, opts)) : null,
     section(`今日　${label(t)}`, today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today', class: 'tb-sec tb-sec--today' }, { drop: 'today' }),
     section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,

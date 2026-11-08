@@ -37,8 +37,10 @@ function saveTab(v) {
 
 // プロジェクトの表示の切り替え（modes.js の modeBar）と同じ丸い切り替えにそろえる
 function tabStrip(cur, rerender) {
+  // 用途で絞り込んでいる間は「用途なし」を出さない（その用途のタスクに用途なしは無いため）。解除すると戻る
+  const tabs = areaFilter ? TABS.filter((x) => x.value !== 'noarea') : TABS;
   return h('div', { class: 'tb-seg tb-modes', role: 'tablist', 'aria-label': '一覧の切り替え' },
-    TABS.map((x) => h('button', {
+    tabs.map((x) => h('button', {
       type: 'button',
       role: 'tab',
       id: `tb-ctab-${x.value}`,
@@ -151,7 +153,8 @@ export function renderList(container, tasks, opts) {
   const sig = JSON.stringify(params);
   if (sig !== lastParams) { lastParams = sig; areaFilter = params.area || null; picked = null; }
 
-  const tab = loadTab();
+  const saved = loadTab();
+  const tab = areaFilter && saved === 'noarea' ? 'area' : saved; // 選んでいたタブは覚えたまま、絞り込み中だけ用途で見せる
   const scoped = areaFilter ? tasks.filter((x) => x.area === areaFilter) : tasks;
 
   // 入力欄の初期値：絞り込んだ用途＋選んだ見出し
@@ -164,11 +167,9 @@ export function renderList(container, tasks, opts) {
   opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
 
   // 用途タブ以外でも、絞り込み中なら同じ形で出す（ここから解除できるように）
-  const filterBar = areaFilter && tab === 'noarea' ? h('div', { class: 'tb-listbar' }, areaPick(opts)) : null;
 
   container.replaceChildren(h('div', { class: 'tb-list' },
     h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender)),
-    filterBar,
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
       tab === 'status' ? statusTab(scoped, opts) : tab === 'noarea' ? noareaTab(scoped, opts) : areaTab(scoped, opts))));
 }
