@@ -107,7 +107,7 @@ function showCardError(cardEl, msg) {
   setTimeout(() => err.remove(), 4000);
 }
 
-function toggleDone(task, cardEl) {
+export function toggleDone(task, cardEl) {
   // 完了にする時は前の状態（進行中・待ちなど）を prevStatus に残し、戻す時にそこへ戻す
   const patch = isOpen(task)
     ? { status: 'done', prevStatus: task.status || 'todo' }

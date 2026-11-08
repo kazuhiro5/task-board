@@ -20,6 +20,7 @@ import { renderSearch, focusSearch } from './views/search.js';
 import { showToast } from './toast.js';
 import { renderLinks, mountLinkAdd } from './views/links.js';
 import { writeBackup, lastBackupLabel, readBackup } from './backup.js';
+import { openCalendarConnect } from './calconnect.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
@@ -408,6 +409,13 @@ for (const [id, view] of [['manageAreasBtn', 'manageAreas'], ['manageProjectsBtn
     navigate(view, {});
   });
 }
+
+// ⋯メニューの「Googleカレンダーをつなぐ」
+$('#calendarBtn').addEventListener('click', () => {
+  const d = document.querySelector('details.user');
+  if (d) d.open = false;
+  openCalendarConnect();
+});
 
 // ⋯メニューの「ゴミ箱」
 $('#trashBtn').addEventListener('click', () => {

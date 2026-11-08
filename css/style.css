@@ -302,3 +302,7 @@ button:not(:disabled):active, .chip:active, .tb-card .tb-body:active, a.tb-link:
 @media (prefers-reduced-motion: reduce) {
   button:not(:disabled):active, .chip:active, .tb-card .tb-body:active, a.tb-link:active, select:active { transform: none; }
 }
+.tb-calconn { max-width: 460px; }
+.tb-calconn-help { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.tb-calconn-field { display: grid; gap: 4px; margin: 0 0 10px; font-size: 13px; }
+.tb-calconn-field input { font: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); }

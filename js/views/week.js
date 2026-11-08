@@ -18,6 +18,13 @@ let weekFilter = null; // 絞り込み（filter.js の形）
 let stripOpen = false; // 日付なしを開いているか（ふだんは閉じて、週の予定を先に見せる）
 let stripAll = false; // 日付なしの帯を折り返して全部出しているか
 
+// ホームのミニカレンダーから、その日のある週を開く（その日を「ここに追加」の日にする）
+export function showWeekOf(day) {
+  const t = todayKey();
+  weekOffset = Math.round((fromKey(weekDays(day)[0]) - fromKey(weekDays(t)[0])) / 86400000 / 7);
+  pickedDay = day;
+}
+
 // 日付なしの帯。PCのマウスでは横に流しにくいので、左右の送りボタンを付ける
 // プロジェクトのカレンダー（modes.js）でも使う。opts は rerender があればよい
 export function noDateStrip(tasks, cmp, opts) {

@@ -41,7 +41,8 @@ let projects = new Map(); // プロジェクト名 → { phases, updatedAt }
 let areaList = null; // 用途の一覧（null＝文書なし。決まった6つとして扱う）
 let links = []; // リンク集（足した順）
 let projectOrder = []; // 左の一覧で引きずって決めたプロジェクトの順（meta/areas の projectOrder）
-let linkAreaOrder = []; // リンク集の用途の塊の順（meta/areas の linkAreaOrder。'' は用途なし）。左の一覧の用途の順とは別
+let linkAreaOrder = [];
+let calendarConf = null; // Googleカレンダーのつなぎ先（meta/areas の calendar：{ url, key }）。公開リポジトリには書かず、本人の場所にだけ置く // リンク集の用途の塊の順（meta/areas の linkAreaOrder。'' は用途なし）。左の一覧の用途の順とは別
 
 export const DEFAULT_PHASES = 5;
 const TRASH_DAYS = 30;
@@ -570,6 +571,13 @@ export function reorderAreas(names) {
 }
 // リンク集の用途の塊の順。keys は '' ＝用途なし
 export function getLinkAreaOrder() { return linkAreaOrder; }
+// Googleカレンダーのつなぎ先（無ければ null）。消す時は null を渡す
+export function getCalendarConf() { return calendarConf; }
+export function setCalendarConf(conf) {
+  calendarConf = conf && conf.url ? { url: String(conf.url).trim(), key: String(conf.key || '').trim() } : null;
+  emit();
+  return backend.setMeta({ calendar: calendarConf });
+}
 export function reorderLinkAreas(keys) {
   const prev = linkAreaOrder;
   record(() => reorderLinkAreas(prev));
@@ -885,6 +893,8 @@ async function firestoreBackend(uid) {
     const list = snap.exists() ? snap.data().list : null;
     const po = snap.exists() ? snap.data().projectOrder : null;
     projectOrder = Array.isArray(po) ? po.filter((n) => typeof n === 'string') : [];
+    const cc = snap.exists() ? snap.data().calendar : null;
+    calendarConf = cc && typeof cc.url === 'string' && cc.url ? { url: cc.url, key: String(cc.key || '') } : null;
     const lo = snap.exists() ? snap.data().linkAreaOrder : null;
     linkAreaOrder = Array.isArray(lo) ? lo.filter((n) => typeof n === 'string') : [];
     areaList = Array.isArray(list) && list.length
