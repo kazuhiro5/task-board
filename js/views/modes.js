@@ -336,7 +336,8 @@ function wbsMode(tasks, cfg) {
     const r = zone.getBoundingClientRect();
     if ((y - r.top) / Math.max(1, r.height) < 0.2) return 'before';
     const canInto = zone.dataset.into === '1';
-    return canInto && x > r.left + r.width * 0.5 ? 'into' : 'after';
+    // 境目は左から2割（左1：右4）。中へ入れる方を広く取る（右へ大きく動かさなくても入るように）
+    return canInto && x > r.left + r.width * 0.2 ? 'into' : 'after';
   };
   const root = rows.length ? h('div', { class: 'tb-wbs' }, rows,
     h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段の最後に')) : null;
