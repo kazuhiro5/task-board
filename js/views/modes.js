@@ -23,7 +23,7 @@ function taskCard(x, o = {}) {
 
 export const MODES = [
   { value: 'list', label: '一覧' },
-  { value: 'cols', label: '3列' },
+  { value: 'cols', label: 'フェーズ' },
   { value: 'cal', label: 'カレンダー' },
   { value: 'board', label: '進捗' },
 ];
