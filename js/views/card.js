@@ -187,6 +187,8 @@ export function taskCard(task, opts = {}) {
   const done = !isOpen(task);
   const hide = new Set(opts.hide || []);
   const meta = [];
+  // areaInMeta：用途を名前の前ではなく、印の行（用途・プロジェクトなど）の先頭に出す（日付なしの帯のカード）
+  if (opts.areaInMeta && task.area && !(opts.hide || []).includes('area')) meta.push(areaMark(task.area));
   for (const b of opts.badges || []) meta.push(h('span', { class: 'tb-tag tb-tag--badge' }, b));
   if ((task.status === 'doing' || task.status === 'waiting') && !hide.has('status')) {
     meta.push(h('span', { class: `tb-tag tb-tag--${task.status}` }, STATUS_LABEL[task.status]));
@@ -220,7 +222,7 @@ export function taskCard(task, opts = {}) {
       onclick: () => pressBody(task, card),
     },
       h('span', { class: 'tb-line' },
-        task.area && !hide.has('area') ? areaMark(task.area) : null,
+        task.area && !hide.has('area') && !opts.areaInMeta ? areaMark(task.area) : null,
         h('span', { class: 'tb-title' }, task.title || '（無題）'),
         h('span', { class: 'tb-chev', 'aria-hidden': 'true' }, '▾')),
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,

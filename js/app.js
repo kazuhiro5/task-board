@@ -435,6 +435,12 @@ function scheduleCarry() {
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleCarry(); });
 
+// 週・カレンダーで日をダブルクリックした時に、入力欄を開く（画面は setContext でやる日を渡してから送る）
+document.addEventListener('tb:add-open', () => {
+  if (!addBox || $('#add').hidden) return;
+  setTimeout(() => addBox.open(), 0); // setContext の反映（次のマイクロタスク）の後に開く
+});
+
 async function boot() {
   renderThemeOpts();
   addBox = mountAdd($('#add'), () => state.ctx);

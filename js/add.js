@@ -316,6 +316,14 @@ export function mountAdd(container, getContext) {
       syncContext();
       renderTags();
     },
+    // 画面から開く（週・カレンダーで日をダブルクリックした時）。その時の文脈（やる日）を初期値にして名前の欄へ
+    open() {
+      touched = new Set();
+      syncContext();
+      renderTags();
+      title.focus();
+      setOpen(true);
+    },
   };
 }
 

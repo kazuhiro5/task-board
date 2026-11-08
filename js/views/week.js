@@ -27,7 +27,7 @@ export function noDateStrip(tasks, cmp, opts) {
   }, `日付なし ${items.length}件 ${stripOpen ? '▾' : '▸'}`);
   if (!stripOpen) return h('div', { class: 'tb-strip is-closed' }, toggle);
   const scroller = h('div', { class: 'tb-strip-cards tb-cards' + (stripAll ? ' is-all' : '') },
-    items.map((x) => taskCard(x, { hide: ['doDate'] })));
+    items.map((x) => taskCard(x, { hide: ['doDate'], areaInMeta: true })));
   const step = (dir) => scroller.scrollBy({ left: dir * scroller.clientWidth * 0.8, behavior: 'smooth' });
   return h('section', { class: 'tb-strip', 'data-drop': 'nodate', 'aria-label': '日付なし' },
     h('div', { class: 'tb-strip-head' },
@@ -76,7 +76,18 @@ export function renderWeek(container, tasks, opts) {
     picked ? h('span', { class: 'tb-here' }, 'ここに追加') : null);
 
     const n = planned.length + dueOnly.length + done.length;
-    return h('section', { class: 'tb-day' + (d === t ? ' is-today' : '') + (picked ? ' is-picked' : ''), 'data-day': d, 'data-drop': d, 'data-drop-ok': true },
+    return h('section', {
+      class: 'tb-day' + (d === t ? ' is-today' : '') + (picked ? ' is-picked' : ''), 'data-day': d, 'data-drop': d, 'data-drop-ok': true,
+      title: 'ダブルクリックでこの日に追加',
+      // 空いている所をダブルクリック → この日をやる日にして入力欄を開く（タスクの上では開かない）
+      ondblclick: (e) => {
+        if (e.target.closest('.tb-card, button')) return;
+        pickedDay = d;
+        opts.setContext({ doDate: d });
+        opts.rerender();
+        document.dispatchEvent(new CustomEvent('tb:add-open'));
+      },
+    },
       head,
       h('div', { class: 'tb-cards' },
         planned.map((x) => taskCard(x, { hide: ['doDate'] })),

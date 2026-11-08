@@ -265,8 +265,9 @@ function listMode(tasks, cfg, s) {
   const groups = sections.length ? h('div', { class: 'tb-groups' + (cfg.scope === 'project' ? ' is-rows' : '') }, sections) : null;
   if (groups && draggable) enableDrag(groups, { rootSel: '.tb-groups.is-rows', onDrop: dropToGroup });
   return [groupBar(cfg, s),
+    key === 'sprint' ? addSprintBar(cfg) : null,
     groups || h('p', { class: 'tb-empty' }, 'タスクはありません'),
-    key === 'sprint' ? addSprintBar(cfg) : addPhaseBtn(cfg)];
+    key === 'sprint' ? null : addPhaseBtn(cfg)];
 }
 
 // ---- スプリント ----
@@ -356,9 +357,9 @@ function sprintMode(tasks, cfg) {
   const board = h('div', { class: 'tb-spboard' }, col(null), sps.map(col));
   enableDrag(board, { rootSel: '.tb-spboard', onDrop: dropToGroup });
   return [
+    addSprintBar(cfg),
     h('p', { class: 'tb-empty tb-sp-help' }, 'スプリント＝期間の箱。カードを引きずって箱の間を動かします。期間が終わると、終わっていないものは次のスプリントへ自動で移ります。'),
     board,
-    addSprintBar(cfg),
   ];
 }
 
@@ -452,7 +453,17 @@ function calMode(tasks, cfg, s) {
     h('span', { class: 'tb-count' }, String(planned.length + dueOnly.length)),
     picked ? h('span', { class: 'tb-here' }, 'ここに追加') : null);
     const n = planned.length + dueOnly.length + done.length;
-    return h('section', { class: 'tb-day' + (d === t ? ' is-today' : '') + (picked ? ' is-picked' : ''), 'data-day': d, 'data-drop': d, 'data-drop-ok': true },
+    return h('section', {
+      class: 'tb-day' + (d === t ? ' is-today' : '') + (picked ? ' is-picked' : ''), 'data-day': d, 'data-drop': d, 'data-drop-ok': true,
+      title: 'ダブルクリックでこの日に追加',
+      ondblclick: (e) => {
+        if (e.target.closest('.tb-card, button')) return;
+        s.pickedDay = d;
+        cfg.setContext({ ...cfg.baseCtx, doDate: d });
+        cfg.rerender();
+        document.dispatchEvent(new CustomEvent('tb:add-open'));
+      },
+    },
       head,
       h('div', { class: 'tb-cards' },
         planned.map((x) => taskCard(x, { hide: ['doDate'] })),
