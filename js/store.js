@@ -136,6 +136,7 @@ function quiet(fn) {
 }
 
 function emit() {
+  wbsCodes = null;
   for (const cb of listeners) cb(tasks);
 }
 
@@ -180,8 +181,20 @@ export function wbsTree(project) {
     if (p) { if (!kids.has(p.id)) kids.set(p.id, []); kids.get(p.id).push(x); } else roots.push(x);
   }
   const ord = (a, b) => ((a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
-  const build = (x, level) => ({ task: x, level, kids: level >= WBS_MAX ? [] : (kids.get(x.id) || []).sort(ord).map((c) => build(c, level + 1)) });
-  return roots.sort(ord).map((x) => build(x, 1));
+  // code：WBSの番号（1・1.2・1.2.3）。同じ段の並び（order）の順に1から
+  const build = (x, level, code) => ({ task: x, level, code,
+    kids: level >= WBS_MAX ? [] : (kids.get(x.id) || []).sort(ord).map((c, i) => build(c, level + 1, `${code}.${i + 1}`)) });
+  return roots.sort(ord).map((x, i) => build(x, 1, String(i + 1)));
+}
+// タスクの WBS の番号（プロジェクトに入っていなければ ''）。データが変わるたびに作り直す（emit で捨てる）
+let wbsCodes = null;
+export function wbsCode(id) {
+  if (!wbsCodes) {
+    wbsCodes = new Map();
+    const walk = (nodes) => { for (const n of nodes) { wbsCodes.set(n.task.id, n.code); walk(n.kids); } };
+    for (const name of new Set(tasks.map((x) => x.project).filter(Boolean))) walk(wbsTree(name));
+  }
+  return wbsCodes.get(id) || '';
 }
 // 子を持つタスクか（親になっているもの。スプリントの箱には入れず、WBSの見出しとして扱う）
 export function hasChildren(id) {

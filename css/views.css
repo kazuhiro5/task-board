@@ -708,3 +708,9 @@
   background: color-mix(in srgb, var(--line) 35%, var(--bg));
   box-shadow: 6px 0 10px -6px rgb(0 0 0 / .25);
 }
+
+/* WBSの番号（名前の前） */
+.tb-wbs-code {
+  flex: none; font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; line-height: 1.5; background: var(--bg);
+}

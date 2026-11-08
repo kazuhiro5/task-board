@@ -1,5 +1,5 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo, parentPath } from '../store.js';
+import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo, parentPath, wbsCode } from '../store.js';
 import { showToast } from '../toast.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
@@ -225,6 +225,8 @@ export function taskCard(task, opts = {}) {
     },
       h('span', { class: 'tb-line' },
         task.area && !hide.has('area') && !opts.areaInMeta ? areaMark(task.area) : null,
+        // WBSの番号（1.2.3）。どの大項目のどこにある作業かを、名前の前で一目で分かるように
+        task.project && !hide.has('wbs') && wbsCode(task.id) ? h('span', { class: 'tb-wbs-code' }, wbsCode(task.id)) : null,
         h('span', { class: 'tb-title' }, task.title || '（無題）'),
         h('span', { class: 'tb-chev', 'aria-hidden': 'true' }, '▾')),
       // memoPreview：名前の下に内容の書き出しを出す（日付なしの帯のカード。名前と見分けるため小さく薄い字）
