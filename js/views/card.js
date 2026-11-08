@@ -227,6 +227,8 @@ export function taskCard(task, opts = {}) {
         task.area && !hide.has('area') && !opts.areaInMeta ? areaMark(task.area) : null,
         h('span', { class: 'tb-title' }, task.title || '（無題）'),
         h('span', { class: 'tb-chev', 'aria-hidden': 'true' }, '▾')),
+      // memoPreview：名前の下に内容の書き出しを出す（日付なしの帯のカード。名前と見分けるため小さく薄い字）
+      opts.memoPreview && task.memo ? h('span', { class: 'tb-preview' }, task.memo) : null,
       meta.length ? h('span', { class: 'tb-meta' }, meta) : null,
     ),
   );

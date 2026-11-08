@@ -27,7 +27,7 @@ export function noDateStrip(tasks, cmp, opts) {
   }, `日付なし ${items.length}件 ${stripOpen ? '▾' : '▸'}`);
   if (!stripOpen) return h('div', { class: 'tb-strip is-closed' }, toggle);
   const scroller = h('div', { class: 'tb-strip-cards tb-cards' + (stripAll ? ' is-all' : '') },
-    items.map((x) => taskCard(x, { hide: ['doDate'], areaInMeta: true })));
+    items.map((x) => taskCard(x, { hide: ['doDate'], areaInMeta: true, memoPreview: true })));
   const step = (dir) => scroller.scrollBy({ left: dir * scroller.clientWidth * 0.8, behavior: 'smooth' });
   return h('section', { class: 'tb-strip', 'data-drop': 'nodate', 'aria-label': '日付なし' },
     h('div', { class: 'tb-strip-head' },

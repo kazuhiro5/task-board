@@ -179,12 +179,18 @@
   grid-auto-columns: 230px; gap: 6px; align-items: start;
   overflow-x: auto; overscroll-behavior-x: contain; padding: 0 0 6px; scroll-snap-type: x proximity;
 }
-/* 帯のカードは同じ大きさにそろえる（名前は4行まで・印は1行まで。はみ出しは「…」） */
+/* 帯のカードは同じ大きさにそろえる（名前は1行・内容は2行・印は1行まで。はみ出しは「…」） */
 .tb-strip-cards > .tb-card { scroll-snap-align: start; font-size: 13px; height: 120px; overflow: hidden; }
-.tb-strip-cards > .tb-card .tb-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.tb-strip-cards > .tb-card .tb-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; min-width: 0; }
+.tb-strip-cards > .tb-card .tb-line { min-width: 0; }
+/* 名前は1行（太字）、その下に内容を2行まで（小さく薄い字）。入らない分は「…」 */
+.tb-strip-cards > .tb-card .tb-preview {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  margin-top: 2px; font-size: 12px; line-height: 1.45; color: var(--muted); white-space: pre-line;
+}
 .tb-strip-cards > .tb-card .tb-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tb-strip-cards > .tb-card .tb-memo { display: none; }
-.tb-strip-cards > .tb-card .tb-body { justify-content: space-between; align-self: stretch; padding-top: 12px; padding-bottom: 8px; }
+.tb-strip-cards > .tb-card .tb-body { justify-content: flex-start; align-self: stretch; padding-top: 12px; padding-bottom: 8px; }
 /* 完了の丸は名前の1行目の高さにそろえる（縦の真ん中だと、名前が長い時に離れて見えるため） */
 .tb-strip-cards > .tb-card .tb-check { align-self: stretch; place-items: start center; min-height: 0; padding-top: 16px; }
 .tb-strip-cards > .tb-card .tb-line { align-items: flex-start; }
@@ -695,3 +701,10 @@
 }
 .tb-dragging .tb-wbs-top.is-drop-over { outline: 2px solid var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 700; }
 .tb-dragging .tb-wbs-top { padding: 14px 12px; }
+
+/* スプリント：バックログの列は、横に流しても左に残す（スプリントが増えても見えるように） */
+.tb-spboard > .tb-spcol:first-child {
+  position: sticky; left: 0; z-index: 3;
+  background: color-mix(in srgb, var(--line) 35%, var(--bg));
+  box-shadow: 6px 0 10px -6px rgb(0 0 0 / .25);
+}

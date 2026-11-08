@@ -439,7 +439,7 @@ function timelineMode(tasks, cfg) {
     sps.length ? h('div', { class: 'tb-tl' }, rows) : h('p', { class: 'tb-empty' }, 'スプリントがありません（「スプリント」で作れます）'),
     h('section', { class: 'tb-sec tb-tl-drawer' },
       sectionHead('期間の決まっていない作業（バックログ）', backlog.length),
-      backlog.length ? h('div', { class: 'tb-cards tb-strip-cards is-all' }, backlog.map((x) => taskCard(x, { areaInMeta: true }))) : null),
+      backlog.length ? h('div', { class: 'tb-cards tb-strip-cards is-all' }, backlog.map((x) => taskCard(x, { areaInMeta: true, memoPreview: true }))) : null),
   ];
 }
 
