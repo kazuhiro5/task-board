@@ -1,7 +1,7 @@
 // 画面「一覧」。担当：画面役。
 // renderList(container, tasks, opts)：opts = { group, setGroup, setContext, rerender, params, navigate }
 // 上の切り替えで「用途」「用途なし」「進捗」を選ぶ（選んだタブは localStorage の tb.listTab）。
-// 用途タブの「完了を表示」の横の「絞り込み」で用途を選ぶと、その用途の一覧へ（用途なし・進捗のタブには出さない）。
+// 用途タブ・進捗タブの「絞り込み」で用途を選ぶと、その用途の一覧へ（用途なしのタブには出さない）。
 //   用途：用途ごとのグループ（大学…勉強→未設定）。「完了を表示」で完了も出す
 //   進捗：状態ごと（未着手・進行中・待ち・完了）。本文が広い時は4列、狭い時は見出し付きの縦のリスト
 //   用途なし：用途の付いていない未完了（ほかのタブで埋もれがちなもの）。進捗ごと
@@ -143,7 +143,7 @@ function statusTab(scoped, opts) {
     return group('status', value, label, items, (x) => addMoves(taskCard(x, { hide: ['status'] }), x),
       { cls: `tb-bcol tb-bcol--${value}`, more, empty: true, rerender: opts.rerender });
   });
-  return [h('div', { class: 'tb-prog' }, cols)];
+  return [h('div', { class: 'tb-listbar' }, areaPick(opts)), h('div', { class: 'tb-prog' }, cols)];
 }
 
 export function renderList(container, tasks, opts) {
@@ -164,7 +164,7 @@ export function renderList(container, tasks, opts) {
   opts.setContext({ ...base, ...(pickedVal ? { [ctxKey]: pickedVal } : {}) });
 
   // 用途タブ以外でも、絞り込み中なら同じ形で出す（ここから解除できるように）
-  const filterBar = areaFilter && tab !== 'area' ? h('div', { class: 'tb-listbar' }, areaPick(opts)) : null;
+  const filterBar = areaFilter && tab === 'noarea' ? h('div', { class: 'tb-listbar' }, areaPick(opts)) : null;
 
   container.replaceChildren(h('div', { class: 'tb-list' },
     h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender)),
