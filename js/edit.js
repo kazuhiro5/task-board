@@ -350,17 +350,18 @@ export function openEdit(task) {
       el('div', { class: 'edit-head-btns' }, [expandBtn, closeBtn]),
     ]),
     el('div', { class: 'edit-body' }, [
+      // 並びはタスクの追加（入力欄）と同じ：名前 → 内容 → 状態（編集だけ）→ 優先度 → 用途 → やる日 → 締切 → 繰り返し → プロジェクト → 親 → スプリント
       field('タスク名', [titleInput]),
+      field('内容', [memoBox]),
       field('状態', [statusBox]),
+      field('優先度', [chipControl('priority', PRIORITIES)]),
+      field('用途', [chipControl('area', areaNames())]),
       field('やる日', [el('div', { class: 'edit-date' }, doCtl)]),
       field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
-      field('用途', [chipControl('area', areaNames())]),
+      field('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
       field('プロジェクト', [projInput, projChips]),
       parentField,
       phaseField,
-      field('優先度', [chipControl('priority', PRIORITIES)]),
-      field('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
-      field('内容', [memoBox]),
     ]),
     el('div', { class: 'edit-foot' }, [
       error,
