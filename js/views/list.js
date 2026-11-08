@@ -10,7 +10,9 @@
 import { STATUSES } from '../constants.js';
 import { areaNames, addArea } from '../store.js';
 import { h, isOpen, compareTasks, taskCard, sectionHead, areaDot, inlineAdder } from './card.js';
-import { addMoves, doneItems } from './modes.js';
+import { addMoves, doneItems, dropToGroup } from './modes.js';
+import { enableDrag } from './dnd.js';
+import { sorter } from './sort.js';
 
 const TABS = [
   { value: 'area', label: '用途' },
@@ -62,7 +64,9 @@ function group(key, v, title, items, cardOpts, extra = {}) {
     : {});
   // 用途の見出しには、ほかの画面と同じく用途の色の丸を付ける
   if (key === 'area' && v !== NONE) head.querySelector('.tb-sec-title')?.before(areaDot(v));
-  return h('section', { class: 'tb-sec' + (extra.cls ? ` ${extra.cls}` : ''), 'data-group-value': v === NONE ? '' : v },
+  // 引きずって落とす先（用途タブ＝用途、進捗タブ＝状態）。用途なしタブは落とす先にしない
+  const drop = key === 'area' || key === 'status' ? { 'data-drop': `${key}:${v === NONE ? '' : v}`, 'data-drop-ok': true } : {};
+  return h('section', { class: 'tb-sec' + (extra.cls ? ` ${extra.cls}` : ''), 'data-group-value': v === NONE ? '' : v, ...drop },
     head,
     h('div', { class: 'tb-cards' },
       items.map((x) => cardOpts(x)),
@@ -78,7 +82,8 @@ function byArea(list) {
   const order = [...names, ...unknown, NONE].filter((v) => !areaFilter || list.some((x) => (x.area || NONE) === v));
   const buckets = new Map(order.map((v) => [v, []]));
   for (const x of list) buckets.get(x.area || NONE)?.push(x);
-  for (const items of buckets.values()) items.sort(compareTasks);
+  const manual = sorter('manual');
+  for (const items of buckets.values()) items.sort((a, b) => (isOpen(a) ? 0 : 1) - (isOpen(b) ? 0 : 1) || manual(a, b));
   return buckets;
 }
 
@@ -120,7 +125,10 @@ function areaTab(scoped, opts) {
     })));
   const sections = [...buckets.entries()].map(([v, items]) =>
     group('area', v, v === NONE ? '未設定' : v, items, (x) => taskCard(x, { hide: ['area'] }), { rerender: opts.rerender }));
-  return [bar, sections.length ? h('div', { class: 'tb-groups is-rows' }, sections) : h('p', { class: 'tb-empty' }, 'タスクはありません')];
+  const groups = sections.length ? h('div', { class: 'tb-groups is-rows tb-list-area' }, sections) : null;
+  // 別の用途の所へ引きずると用途が変わる（同じ用途の中では順番）
+  if (groups) enableDrag(groups, { rootSel: '.tb-list-area', onDrop: dropToGroup });
+  return [bar, groups || h('p', { class: 'tb-empty' }, 'タスクはありません')];
 }
 
 // 用途なしタブ：用途の付いていない未完了。進捗（状態）ごとに分け、中身の無い状態は出さない
@@ -141,11 +149,14 @@ function statusTab(scoped, opts) {
     let items = scoped.filter((x) => (x.status || 'todo') === value);
     let more = 0;
     if (value === 'done') ({ items, more } = doneItems(items));
-    else items.sort(compareTasks);
+    else items.sort(sorter('manual'));
     return group('status', value, label, items, (x) => addMoves(taskCard(x, { hide: ['status'] }), x),
       { cls: `tb-bcol tb-bcol--${value}`, more, empty: true, rerender: opts.rerender });
   });
-  return [h('div', { class: 'tb-listbar' }, areaPick(opts)), h('div', { class: 'tb-prog' }, cols)];
+  const prog = h('div', { class: 'tb-prog' }, cols);
+  // 別の状態の列へ引きずると状態が変わる
+  enableDrag(prog, { rootSel: '.tb-prog', onDrop: dropToGroup });
+  return [h('div', { class: 'tb-listbar' }, areaPick(opts)), prog];
 }
 
 export function renderList(container, tasks, opts) {

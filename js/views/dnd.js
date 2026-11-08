@@ -7,7 +7,7 @@
 //   キーボード：行で Alt+↑/↓ → 同じ区分の中で1つ上/下、Alt+←/→ → cfg.onKey に任せる（前後の日）
 //
 // enableDrag(rootEl, cfg)：描画のたびに新しい根の要素に付ける。
-//   cfg = { rootSel, onDrop({ id, fromKey, toKey, toZone, finalIds }), onKey?(id, fromKey, dir) }
+//   cfg = { rootSel, onDrop({ id, fromKey, toKey, toZone, finalIds, y }), onKey?(id, fromKey, dir), onHover?(zone, x, y) }
 //   引きずっている間に描き直されても、rootSel で今の根を探し直す。
 import { getTasks, group, lastHistory, undo } from '../store.js';
 import { showToast } from '../toast.js';
@@ -151,6 +151,8 @@ function findTarget() {
     if (d <= SNAP && d < best) { hit = z; best = d; }
   }
   for (const z of zones) z.classList.toggle('is-drop-over', z === hit);
+  // 落とす先の中のどこにいるか（WBS の「上に並べる／中に入れる／下に並べる」の見分けに使う）
+  if (hit) s.cfg.onHover?.(hit, s.x, s.y);
   if (!hit || !hit.hasAttribute('data-drop-ok')) {
     s.target = null;
     s.line.hidden = true;
@@ -231,7 +233,7 @@ function finish(drop) {
   }
   swallowClick(cur.x, cur.y);
   if (drop && cur.target) {
-    cur.cfg.onDrop({ id: cur.id, fromKey: cur.fromKey, toKey: cur.target.key, toZone: cur.target.zone, finalIds: cur.target.finalIds });
+    cur.cfg.onDrop({ id: cur.id, fromKey: cur.fromKey, toKey: cur.target.key, toZone: cur.target.zone, finalIds: cur.target.finalIds, y: cur.y });
   }
 }
 

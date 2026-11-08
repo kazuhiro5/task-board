@@ -11,7 +11,8 @@
 //   中の上に一括ボタン「全部今日へ／全部明日へ／日付なしへ」（やる日と締切の両方を書き換える）。2回押し。
 //   書いた直後に「◯件を動かしました・元に戻す」（元のやる日・締切に戻す）。
 import { todayKey, toKey, addDays, label } from '../dates.js';
-import { h, isOpen, taskCard, sectionHead, areaDot } from './card.js';
+import { h, isOpen, taskCard, sectionHead } from './card.js';
+import { filterPick } from './filter.js';
 import { sorter } from './sort.js';
 import { enableDrag, dropToDay } from './dnd.js';
 import { updateMany, areaNames, projectNames, lastHistory, undo } from '../store.js';
@@ -215,26 +216,9 @@ export function renderToday(container, tasks, opts) {
   // 今日の画面で名前だけ追加したら受信箱へ（受け入れ基準4）。絞り込み中だけ、その用途・プロジェクトを付ける
   opts.setContext(filter ? { [filter.by]: filter.name } : {});
 
-  // 絞り込みは1つの「選ぶ」欄（用途とプロジェクトを分けて並べる）。ボタンを並べると上が埋まるため
-  const pick = h('select', {
-    class: 'tb-filter-select' + (filter ? ' is-on' : ''), 'aria-label': '絞り込み',
-    onchange: (e) => {
-      const v = e.target.value;
-      filter = v ? { by: v.startsWith('a:') ? 'area' : 'project', name: v.slice(2) } : null;
-      opts.rerender();
-    },
-  },
-  h('option', { value: '' }, '絞り込み：すべて'),
-  areas.length ? h('optgroup', { label: '用途' }, areas.map((a) => h('option', { value: `a:${a}` }, `${a}（${count('area', a)}）`))) : null,
-  projects.length ? h('optgroup', { label: 'プロジェクト' }, projects.map((p) => h('option', { value: `p:${p}` }, `${p}（${count('project', p)}）`))) : null);
-  pick.value = filter ? `${filter.by === 'area' ? 'a' : 'p'}:${filter.name}` : '';
-
-  // 用途で絞り込んだ時は、選ぶ欄の左に用途の色の丸（選ぶ欄の中には色を付けられないため、重ねて置く）
-  const pickBox = filter?.by === 'area'
-    ? h('span', { class: 'tb-filter-wrap has-dot' }, areaDot(filter.name), pick)
-    : h('span', { class: 'tb-filter-wrap' }, pick);
-  const topBar = h('div', { class: 'tb-today-top' }, pickBox,
-    filter ? h('button', { type: 'button', class: 'tb-x', 'aria-label': '絞り込みを解除', title: '解除', onclick: () => { filter = null; opts.rerender(); } }, '×') : null);
+  // 絞り込み（今日・週・プロジェクトで同じ部品。filter.js）
+  const topBar = h('div', { class: 'tb-today-top' },
+    filterPick({ tasks, value: filter, kinds: ['area', 'project'], onChange: (v) => { filter = v; opts.rerender(); } }));
   const chips = null;
   const filterBar = null;
 

@@ -696,7 +696,7 @@
 .tb-dragging .tb-wbs-row.is-drop-ok { outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 .tb-dragging .tb-wbs-row.is-drop-over { position: relative; outline: 2px solid var(--accent); background: var(--accent-weak); }
 .tb-dragging .tb-wbs-row.is-drop-over::after {
-  content: "▼ この下に入れる"; position: absolute; left: 12px; top: -11px; z-index: 5;
+  content: "↳ この中に入れる"; position: absolute; left: 12px; top: -11px; z-index: 5;
   background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; pointer-events: none;
 }
 .tb-dragging .tb-wbs-top.is-drop-over { outline: 2px solid var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 700; }
@@ -714,3 +714,22 @@
   flex: none; font-size: 11px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums;
   border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; line-height: 1.5; background: var(--bg);
 }
+
+.tb-mode-filter { margin: 0 0 10px; }
+.tb-weeknav .tb-filter-pick { max-width: 100%; }
+
+/* 進捗の各カードの「→進行中」などのボタンは、マウスの端末では隠す（引きずって状態を変えられるため）。
+   指の端末では残す（長押しして引きずるより速いことがあるため。引きずれない人の代わりの操作にもなる） */
+@media (hover: hover) and (pointer: fine) { .tb-moves { display: none; } }
+
+/* タイムライン：作業を引きずっている時、落とせるスプリントのバーを目立たせる */
+.tb-dragging .tb-tl-bar.is-drop-ok { outline: 2px dashed var(--accent); }
+.tb-dragging .tb-tl-bar.is-drop-over { outline: 3px solid var(--accent); background: var(--accent); color: var(--on-accent); }
+.tb-dragging .tb-tl-root:has(.tb-tl-drawer .is-drag-src) .tb-drop-line, .tb-dragging:has(.tb-tl-drawer .is-drag-src) .tb-drop-line { display: none; }
+
+/* WBS：上・下の端に落とす時は、線で「間に並べる」と見せる */
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="before"], .tb-dragging .tb-wbs-row.is-drop-over[data-mode="after"] { outline: none; background: none; }
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="before"] { box-shadow: 0 -3px 0 0 var(--accent); }
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="after"] { box-shadow: 0 3px 0 0 var(--accent); }
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="before"]::after { content: "▲ この上に並べる"; }
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="after"]::after { content: "▼ この下に並べる"; top: auto; bottom: -11px; }

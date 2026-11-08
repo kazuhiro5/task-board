@@ -292,3 +292,13 @@ button { font: inherit; color: inherit; }
 .tb-confirm-v { font-weight: 600; font-variant-numeric: tabular-nums; }
 .tb-confirm-warn { margin: 0 0 16px; font-size: 13px; color: var(--danger); line-height: 1.6; }
 .tb-confirm-btns { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* 押せる所は、押した瞬間に少し沈んで色が変わる（押したことがすぐ分かるように。0.1秒以内の反応） */
+button:not(:disabled):active, .chip:active, .tb-card .tb-body:active, a.tb-link:active, select:active {
+  filter: brightness(.94);
+  transform: translateY(1px);
+}
+.tb-dragging button:active, .tb-dragging .tb-body:active { transform: none; filter: none; }
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled):active, .chip:active, .tb-card .tb-body:active, a.tb-link:active, select:active { transform: none; }
+}

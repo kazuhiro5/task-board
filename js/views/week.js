@@ -10,9 +10,11 @@ import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard, md } from './card.js';
 import { sorter } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
+import { filterPick, matchFilter } from './filter.js';
 
 let weekOffset = 0; // 0＝今週、-1＝前の週、1＝次の週
 let pickedDay = null; // 見出しを押して「ここに追加」にした日
+let weekFilter = null; // 絞り込み（filter.js の形）
 let stripOpen = false; // 日付なしを開いているか（ふだんは閉じて、週の予定を先に見せる）
 let stripAll = false; // 日付なしの帯を折り返して全部出しているか
 
@@ -42,11 +44,12 @@ export function noDateStrip(tasks, cmp, opts) {
     scroller);
 }
 
-export function renderWeek(container, tasks, opts) {
+export function renderWeek(container, allTasks, opts) {
+  const tasks = allTasks.filter((x) => matchFilter(x, weekFilter));
   const t = todayKey();
   const days = weekDays(addDays(t, weekOffset * 7));
   if (pickedDay && !days.includes(pickedDay)) pickedDay = null;
-  opts.setContext({ doDate: pickedDay || t });
+  opts.setContext({ doDate: pickedDay || t, ...(weekFilter && weekFilter.by !== 'status' ? { [weekFilter.by]: weekFilter.name } : {}) });
 
   const mode = 'manual';
   const cmp = sorter(mode);
@@ -55,6 +58,7 @@ export function renderWeek(container, tasks, opts) {
     h('button', { type: 'button', class: 'tb-btn', onclick: () => go(weekOffset - 1) }, '‹ 前の週'),
     h('button', { type: 'button', class: 'tb-btn' + (weekOffset === 0 ? ' is-active' : ''), 'aria-pressed': String(weekOffset === 0), onclick: () => go(0) }, '今週'),
     h('button', { type: 'button', class: 'tb-btn', onclick: () => go(weekOffset + 1) }, '次の週 ›'),
+    filterPick({ tasks: allTasks, value: weekFilter, kinds: ['area', 'project'], onChange: (v) => { weekFilter = v; opts.rerender(); } }),
     h('span', { class: 'tb-weekrange' }, `${md(days[0])} 〜 ${md(days[6])}`),
   );
 

@@ -150,6 +150,25 @@ function setExpanded(card, task, on) {
   }
 }
 
+// 開いている行の内容は、行の外（何もない所・ほかの所）を押すか Esc で閉じる（一般的な「外を押すと閉じる」に合わせる）。
+// 編集・メニュー・お知らせの中を押した時は閉じない（そこから操作を続けるため）
+function collapseOpen() {
+  if (!openId) return;
+  for (const c of document.querySelectorAll('.tb-card.is-expanded')) setExpanded(c, null, false);
+  openId = null;
+}
+document.addEventListener('pointerdown', (e) => {
+  if (!openId) return;
+  const t = e.target;
+  if (t.closest?.('.tb-card.is-expanded, .edit-dialog, .tb-menu, .toast, dialog')) return;
+  collapseOpen();
+}, true);
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !openId) return;
+  if (document.querySelector('.edit-dialog[open], .tb-menu')) return; // 先に開いている物を閉じる
+  collapseOpen();
+});
+
 function pressBody(task, card) {
   if (openId === task.id && card.classList.contains('is-expanded')) { openEdit(task); return; }
   // 前に開いていた行（同じ画面の中）を閉じる

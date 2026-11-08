@@ -14,6 +14,7 @@ import { loadSort, saveSort, sorter, sortSelect, planDrop, saveWrites } from './
 import { enableDrag, dayDrag } from './dnd.js';
 import { showToast } from '../toast.js';
 import { noDateStrip } from './week.js';
+import { filterPick, matchFilter } from './filter.js';
 
 // cfg.hide（例：プロジェクトの中では ['project']）を、すべての行に足す
 let extraHide = [];
@@ -34,6 +35,7 @@ export const MODES = [
 const NONE = '\u0000none'; // 未設定のグループ
 
 const scopes = {};
+const projFilters = new Map(); // プロジェクトごとの絞り込み（表示を切り替えても残す）
 function st(scope) {
   if (!scopes[scope]) {
     scopes[scope] = { showDone: false, picked: null, colPick: null, colOpen: false, weekOffset: 0, pickedDay: null };
@@ -134,10 +136,10 @@ const idOf = (key, v) => `${key}:${v === NONE ? '' : v}`;
 const nameOf = (g, v) => (v === NONE ? (g.noneLabel || '未設定') : g.label(v));
 
 // 区分（フェーズ・状態）へ引きずって落とした時：区分が変わればその値を書き、区分の中の順番（order）も書く。
-// 動かしたら必ず「元に戻す」を出す。落とす先の名前＝'phase:番号'（フェーズなし＝'phase:'）／'status:値'
+// 動かしたら必ず「元に戻す」を出す。落とす先の名前＝'sprint:id'／'status:値'／'area:用途'（用途なし＝'area:'）
 const manual = sorter('manual');
 const byManual = (a, b) => (isOpen(a) ? 0 : 1) - (isOpen(b) ? 0 : 1) || manual(a, b);
-function dropToGroup({ id, fromKey, toKey, finalIds }) {
+export function dropToGroup({ id, fromKey, toKey, finalIds }) {
   const byId = new Map(getTasks().map((x) => [x.id, x]));
   const task = byId.get(id);
   if (!task) return;
@@ -146,6 +148,7 @@ function dropToGroup({ id, fromKey, toKey, finalIds }) {
   if (key === 'phase') { const nv = v ? Number(v) : null; if ((task.phase ?? null) !== nv) patch.phase = nv; }
   if (key === 'sprint' && (task.sprint || null) !== (v || null)) { patch.sprint = v || null; patch.carried = false; }
   if (key === 'status' && (task.status || 'todo') !== v) patch.status = v;
+  if (key === 'area' && (task.area || null) !== (v || null)) patch.area = v || null;
   const writes = planDrop({ id, finalIds, byId, datePatch: patch, sameZone: fromKey === toKey, mode: 'manual' });
   if (!writes.length) return;
   group('move', () => saveWrites(writes, (err) => showToast(`動かせませんでした（${err.message || err}）`)));
@@ -320,31 +323,61 @@ function wbsMode(tasks, cfg) {
       const addBtn = n.level < WBS_MAX
         ? h('button', { type: 'button', class: 'tb-btn tb-wbs-add', title: 'この下に足す', 'aria-label': `「${n.task.title}」の下に足す`, onclick: () => { wbsAdding = n.task.id; cfg.rerender(); } }, '＋')
         : h('span', { class: 'tb-wbs-add is-none' });
-      rows.push(h('div', { class: `tb-wbs-row is-l${n.level}${leaf ? ' is-leaf' : ''}`, 'data-drop': `wbs:${n.task.id}`, 'data-drop-ok': n.level < WBS_MAX }, card, pick, addBtn));
+      rows.push(h('div', { class: `tb-wbs-row is-l${n.level}${leaf ? ' is-leaf' : ''}`, 'data-drop': `wbs:${n.task.id}`, 'data-drop-ok': true, 'data-into': n.level < WBS_MAX ? '1' : '0' }, card, pick, addBtn));
       if (wbsAdding === n.task.id) rows.push(h('div', { class: `tb-wbs-row is-l${Math.min(n.level + 1, WBS_MAX)} is-adder` }, wbsAdder(cfg, n.task.id)));
       walk(n.kids);
     }
   };
   walk(wbsTree(cfg.project));
-  // 行を別の行へ引きずる → その行の下へ（親を付け替える）。一番下の欄へ → いちばん上の段へ
+  // 行を引きずって落とす：行の上の端＝その上に並べる、下の端＝その下に並べる、真ん中＝その中に入れる（子にする）。
+  // 3段目の行には中へ入れられないので、上半分＝上、下半分＝下。一番下の欄へ落とすといちばん上の段の最後へ
+  const modeOf = (zone, y) => {
+    const r = zone.getBoundingClientRect();
+    const f = (y - r.top) / Math.max(1, r.height);
+    const canInto = zone.dataset.into === '1';
+    if (!canInto) return f < 0.5 ? 'before' : 'after';
+    return f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'into';
+  };
   const root = rows.length ? h('div', { class: 'tb-wbs' }, rows,
-    h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段に')) : null;
-  if (root) enableDrag(root, { rootSel: '.tb-wbs', onDrop: ({ id, toKey }) => {
-    const to = toKey.slice(4) || null;
-    const task = getTasks().find((x) => x.id === id);
-    if (!task || (task.parent || null) === to || id === to) return;
-    if (to && !parentChoices(cfg.project, id).some((c) => c.id === to)) {
-      showToast('そこには入れられません（3段を超えるか、自分の下です）');
-      cfg.rerender();
-      return;
-    }
-    updateTask(id, { parent: to }).catch((err) => showToast(`動かせませんでした（${err.message || err}）`));
-    const entry = lastHistory();
-    const toName = to ? getTasks().find((x) => x.id === to)?.title : 'いちばん上の段';
-    showToast(`「${task.title}」を「${toName}」${to ? 'の下' : ''}へ`, { action: '元に戻す', onAction: () => undo(entry) });
-  } });
+    h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段の最後に')) : null;
+  if (root) enableDrag(root, {
+    rootSel: '.tb-wbs',
+    onHover: (zone, x, y) => { if (zone.dataset.drop !== 'wbs:') zone.dataset.mode = modeOf(zone, y); },
+    onDrop: ({ id, toKey, toZone, y }) => {
+      const all = getTasks();
+      const byId = new Map(all.map((x) => [x.id, x]));
+      const task = byId.get(id);
+      const targetId = toKey.slice(4) || null;
+      if (!task || id === targetId) return;
+      const mode = targetId ? modeOf(toZone, y) : 'end';
+      const target = targetId ? byId.get(targetId) : null;
+      // 新しい親と、同じ親の中の並び（order）
+      const parent = mode === 'into' ? targetId : mode === 'end' ? null : (target.parent && byId.get(target.parent) && !byId.get(target.parent).deletedAt ? target.parent : null);
+      if (parent && parent !== task.parent && !parentChoices(cfg.project, id).some((c) => c.id === parent)) {
+        showToast('そこには入れられません（3段を超えるか、自分の下です）');
+        cfg.rerender();
+        return;
+      }
+      if (parent === id) return;
+      const ord = (x) => x.order ?? x.createdAt ?? 0;
+      const sibs = all.filter((x) => x.project === cfg.project && x.id !== id && (x.parent || null) === parent && !x.deletedAt).sort((a, b) => ord(a) - ord(b));
+      let order;
+      if (mode === 'before' || mode === 'after') {
+        const i = sibs.findIndex((x) => x.id === targetId);
+        const prev = mode === 'before' ? sibs[i - 1] : target;
+        const next = mode === 'before' ? target : sibs[i + 1];
+        order = prev && next ? (ord(prev) + ord(next)) / 2 : prev ? ord(prev) + 1024 : ord(next) - 1024;
+      } else {
+        order = sibs.length ? ord(sibs[sibs.length - 1]) + 1024 : Date.now();
+      }
+      updateTask(id, { parent, order }).catch((err) => showToast(`動かせませんでした（${err.message || err}）`));
+      const entry = lastHistory();
+      const msg = mode === 'into' ? `「${target.title}」の中へ` : mode === 'end' ? 'いちばん上の段へ' : `「${target.title}」の${mode === 'before' ? '上' : '下'}へ`;
+      showToast(`「${task.title}」を${msg}`, { action: '元に戻す', onAction: () => undo(entry) });
+    },
+  });
   return [
-    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。行を別の行へ引きずると、その下へ移ります。'),
+    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。行を引きずって、ほかの行の真ん中に落とすとその中へ、上下の端に落とすとその上・下に並びます。'),
     root || h('p', { class: 'tb-empty' }, 'まだ何もありません'),
     wbsAdding === '' ? wbsAdder(cfg, null) : h('button', { type: 'button', class: 'tb-btn tb-addphase', onclick: () => { wbsAdding = ''; cfg.rerender(); } }, '＋ 項目を追加'),
   ];
@@ -395,7 +428,8 @@ function timelineMode(tasks, cfg) {
   for (const sp of sps) {
     const items = tasks.filter((x) => x.sprint === sp.id && !hasChildren(x.id));
     const done = items.filter((x) => !isOpen(x)).length;
-    const bar = h('div', { class: 'tb-tl-bar' + (sprintState(sp) === 'now' ? ' is-now' : ''), 'data-sp': sp.id, style: `left:${dx(sp.start)}px;width:${sp.days * px}px`, title: '引きずって日付をずらす' },
+    // バーは2つの役：引きずって日付をずらす（バーをつかむ）／下の作業を落とすとそのスプリントに入る（data-drop）
+    const bar = h('div', { class: 'tb-tl-bar' + (sprintState(sp) === 'now' ? ' is-now' : ''), 'data-sp': sp.id, 'data-drop': `sprint:${sp.id}`, 'data-drop-ok': true, style: `left:${dx(sp.start)}px;width:${sp.days * px}px`, title: '引きずって日付をずらす。下の作業を落とすとこのスプリントに入る' },
       h('i', { style: `width:${items.length ? (done / items.length) * 100 : 0}%` }), `${sp.name}（${items.length}件）`);
     bar.addEventListener('pointerdown', (e) => {
       if (e.button) return;
@@ -430,17 +464,21 @@ function timelineMode(tasks, cfg) {
   const backlog = tasks.filter((x) => isOpen(x) && !hasChildren(x.id) && !(x.sprint && sps.some((sp) => sp.id === x.sprint)));
   const chain = h('input', { type: 'checkbox', onchange: (e) => { tlChain = e.target.checked; } });
   chain.checked = tlChain;
-  return [
+  const tlRoot = h('div', { class: 'tb-tl-root' });
+  const out = [
     h('div', { class: 'tb-tl-tools' },
       h('label', { class: 'tb-tl-chain' }, chain, '後ろもまとめてずらす'),
       h('div', { class: 'tb-seg', role: 'group', 'aria-label': '表示の幅' },
         [['week', '週'], ['month', '月']].map(([v, l]) => h('button', { type: 'button', class: 'tb-seg-btn' + (tlZoom === v ? ' is-active' : ''), onclick: () => { tlZoom = v; cfg.rerender(); } }, l))),
       h('span', { class: 'tb-empty' }, '緑＝スプリント（引きずってずらせる）、青＝大項目、赤い線＝今日。濃い色は終わった割合。')),
     sps.length ? h('div', { class: 'tb-tl' }, rows) : h('p', { class: 'tb-empty' }, 'スプリントがありません（「スプリント」で作れます）'),
-    h('section', { class: 'tb-sec tb-tl-drawer' },
-      sectionHead('期間の決まっていない作業（バックログ）', backlog.length),
+    h('section', { class: 'tb-sec tb-tl-drawer', 'data-drop': 'sprint:', 'data-drop-ok': true },
+      sectionHead('期間の決まっていない作業（バックログ）。スプリントのバーへ引きずると入る', backlog.length),
       backlog.length ? h('div', { class: 'tb-cards tb-strip-cards is-all' }, backlog.map((x) => taskCard(x, { areaInMeta: true, memoPreview: true }))) : null),
   ];
+  tlRoot.append(...out.filter(Boolean));
+  enableDrag(tlRoot, { rootSel: '.tb-tl-root', onDrop: dropToGroup });
+  return [tlRoot];
 }
 
 // ---- スプリント ----
@@ -712,9 +750,14 @@ function boardMode(tasks, cfg) {
   return [board];
 }
 
-export function renderModes(tasks, cfg) {
+export function renderModes(allTasks, cfg) {
   const s = st(cfg.scope);
   const mode = loadMode(cfg.scope);
+  // 絞り込み（用途・状態）。WBS は親子の形を崩さないよう絞らない
+  const fkey = `${cfg.scope}:${cfg.project || ''}`;
+  const fv = mode === 'wbs' ? null : (projFilters.get(fkey) || null);
+  const tasks = allTasks.filter((x) => matchFilter(x, fv));
+  const pick = mode === 'wbs' ? null : filterPick({ tasks: allTasks, value: fv, kinds: ['area', 'status'], onChange: (v) => { if (v) projFilters.set(fkey, v); else projFilters.delete(fkey); cfg.rerender(); } });
   extraHide = cfg.hide || [];
   showPhase = false; // フェーズの印（F2）はスプリントに置き換えたので出さない
   const body = mode === 'wbs' ? wbsMode(tasks, cfg)
@@ -724,5 +767,5 @@ export function renderModes(tasks, cfg) {
     : mode === 'cal' ? calMode(tasks, cfg, s)
       : mode === 'board' ? boardMode(tasks, cfg)
         : listMode(tasks, cfg, s);
-  return h('div', { class: `tb-modes-wrap is-${mode}`, 'data-mode': mode }, modeBar(cfg.scope, mode, cfg.rerender), body);
+  return h('div', { class: `tb-modes-wrap is-${mode}`, 'data-mode': mode }, modeBar(cfg.scope, mode, cfg.rerender), pick ? h('div', { class: 'tb-mode-filter' }, pick) : null, body);
 }

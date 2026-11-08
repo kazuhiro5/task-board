@@ -77,6 +77,13 @@ function setExpanded(on) {
 }
 
 // 閉じる（保存・削除・閉じるボタン・Esc・背景・つまみ、すべてここを通る）
+// 外を押す・Esc・下へ払う・閉じるボタン：どれも「直した所を保存してから閉じる」（保存を押したのと同じ）。
+// 押し忘れで直した所が消えないように。取り消したい時は元に戻す（Ctrl+Z・右上）で戻せる。名前が空なら閉じずにエラー
+function dismissEdit() {
+  const form = dialog?.querySelector('form');
+  if (form) form.requestSubmit(); else closeEdit();
+}
+
 function closeEdit() {
   if (!dialog?.open) return;
   const ae = document.activeElement;
@@ -132,7 +139,7 @@ function makeGrip() {
     dialog.style.transform = '';
     dialog.style.height = '';
     if (dy < -50) setExpanded(true);
-    else if (dy > 80) { if (expanded) setExpanded(false); else closeEdit(); }
+    else if (dy > 80) { if (expanded) setExpanded(false); else dismissEdit(); }
     else if (Math.abs(dy) < 5) setExpanded(!expanded);
   };
   grip.addEventListener('pointerup', end);
@@ -143,14 +150,14 @@ function makeGrip() {
 function getDialog() {
   if (dialog) return dialog;
   dialog = el('dialog', { class: 'edit-dialog', 'aria-label': 'タスクの編集' });
-  // 背景（シートの外）を押したら閉じる。dialog 自身が押された時だけ＝中身の外
+  // 背景（シートの外）を押したら保存して閉じる。dialog 自身が押された時だけ＝中身の外
   dialog.addEventListener('click', (e) => {
     if (e.target !== dialog || !dialog.classList.contains('is-sheet')) return;
     const r = dialog.getBoundingClientRect();
-    if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) closeEdit();
+    if (e.clientY < r.top || e.clientY > r.bottom || e.clientX < r.left || e.clientX > r.right) dismissEdit();
   });
   // モーダル（シート）の Esc：自分の閉じ方に通す
-  dialog.addEventListener('cancel', (e) => { e.preventDefault(); closeEdit(); });
+  dialog.addEventListener('cancel', (e) => { e.preventDefault(); dismissEdit(); });
   dialog.addEventListener('keydown', trapTab);
   // パネル（非モーダル）は Esc で閉じない作りなので、自分で拾う。
   // 入力欄（追加）に打っている最中の Esc では閉じない
@@ -159,14 +166,13 @@ function getDialog() {
     const ae = document.activeElement;
     if (ae && ae !== document.body && !dialog.contains(ae) && !ae.closest('.tb-card')) return;
     e.preventDefault();
-    closeEdit();
+    dismissEdit();
   });
   // パネル（PC）は、パネルの外を押したら閉じる。直した所があれば保存してから（「保存」を押したのと同じ）。
   // 閉じるボタンや Esc を毎回押すのが手間なため。名前が空なら閉じずにエラーを出す（保存の処理がする）
   document.addEventListener('pointerdown', (e) => {
     if (!isPanel() || dialog.contains(e.target) || e.target.closest?.('.toast')) return;
-    const form = dialog.querySelector('form');
-    if (form) form.requestSubmit(); else closeEdit();
+    dismissEdit();
   }, true);
 
   // 幅が変わったら（iPad の回転など）形を切り替える
@@ -333,7 +339,7 @@ export function openEdit(task) {
     const entry = lastHistory();
     showToast('削除しました', { action: '元に戻す', onAction: () => undo(entry) });
   });
-  const closeBtn = el('button', { type: 'button', class: 'edit-close', text: '閉じる', onclick: () => closeEdit() });
+  const closeBtn = el('button', { type: 'button', class: 'edit-close', text: '閉じる', onclick: () => dismissEdit() });
   const expandBtn = el('button', {
     type: 'button', class: 'edit-expand', 'aria-expanded': String(expanded),
     text: expanded ? '縮める' : '広げる', onclick: () => setExpanded(!expanded),
