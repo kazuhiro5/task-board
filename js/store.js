@@ -28,6 +28,7 @@
 //
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
 import { todayKey, addDays, weekStart } from './dates.js';
+import { demoData } from './demodata.js';
 import { normRepeat, nextDate, daysBetween } from './repeat.js';
 import { AREAS, AREA_KEYS, AREA_HEX, SPARE_COLORS } from './constants.js';
 
@@ -940,33 +941,15 @@ async function firestoreBackend(uid) {
 function demoBackend() {
   const t = todayKey();
   let n = 0;
-  const mk = (o) => ({ ...normalize(o), ...o, id: `demo${++n}` });
-  const day = 24 * 60 * 60 * 1000;
-  setAll([
-    mk({ title: '経営戦略のレポートを書く', area: '大学', doDate: t, dueDate: addDays(t, 2), size: '中', priority: '高' }),
-    mk({ title: 'ES提出（〇〇社）', area: '就活', project: '〇〇社選考', phase: 1, dueDate: addDays(t, -1), priority: '高' }),
-    mk({ title: '企業研究をまとめる', area: '就活', project: '〇〇社選考', phase: 1, status: 'done' }),
-    mk({ title: '面接の逆質問を考える', area: '就活', project: '〇〇社選考', phase: 2, doDate: addDays(t, 1), size: '小' }),
-    mk({ title: 'task-board のMVPを作る', area: 'AI開発', project: 'task-board', status: 'doing', size: '大' }),
-    mk({ title: '前日やり残した洗濯', area: '家事', doDate: addDays(t, -1) }),
-    mk({ title: 'シフト提出', area: 'バイト', doDate: addDays(t, 3) }),
-    mk({ title: '統計の復習', area: '勉強', doDate: addDays(t, 5), size: '小', priority: '低' }),
-    mk({ title: '思いついたこと（未整理）' }),
-    mk({ title: '先生の返信待ち', area: '大学', status: 'waiting' }),
-    mk({ title: '終わったタスク', area: '大学', doDate: t, status: 'done' }),
-    // ゴミ箱：3日前に消したもの（残る）と、31日前に消したもの（起動時に完全に消える）
-    mk({ title: '3日前に消したタスク', area: '家事', deletedAt: Date.now() - 3 * day }),
-    mk({ title: '31日前に消したタスク', area: '家事', deletedAt: Date.now() - 31 * day }),
-  ]);
-  projects = new Map();
+  // 中身は demodata.js（人に見せる架空のデータ）
+  const d = demoData(t);
+  n = d.tasks.length;
+  setAll(d.tasks.map((x) => ({ ...normalize(x), ...x })));
+  projects = new Map(d.projects.map(({ name, ...rest }) => [name, { phases: null, phaseNames: null, updatedAt: 0, ...rest }]));
   areaList = null;
-  projectOrder = [];
+  projectOrder = d.projects.map((p) => p.name);
   linkAreaOrder = [];
-  setLinks([
-    { id: 'demoL1', area: '大学', name: 'manaba', url: 'https://manaba.cit.ac.jp/', createdAt: 1 },
-    { id: 'demoL2', area: '大学', name: '', url: 'https://portal.it-chiba.ac.jp/', createdAt: 2 },
-    { id: 'demoL3', area: '就活', name: 'OfferBox', url: 'https://offerbox.jp/', createdAt: 3 },
-  ]);
+  setLinks(d.links);
   const apply = (o) => {
     if (o.type === 'set') { setAll([...allTasks.filter((x) => x.id !== o.id), { ...o.data, id: o.id }]); return; }
     if (o.type === 'delete') { setAll(allTasks.filter((x) => x.id !== o.id)); return; }
