@@ -5,7 +5,8 @@
 //   スプリント＝プロジェクトの中の期間（store の getSprints）。タスクを入れていないものはバックログ。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
 import { updateTask, areaNames, phaseName, renamePhase, deletePhase, lastHistory, undo, group, getTasks,
-  getSprints, addSprint, updateSprint, deleteSprint, sprintState, SPRINT_LENGTHS, wbsTree, hasChildren, addTask, WBS_MAX } from '../store.js';
+  getSprints, addSprint, updateSprint, deleteSprint, sprintState, SPRINT_LENGTHS, wbsTree, hasChildren, addTask, WBS_MAX,
+  shiftSprints, parentChoices } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot, moreMenu } from './card.js';
@@ -24,6 +25,7 @@ function taskCard(x, o = {}) {
 export const MODES = [
   { value: 'wbs', label: 'WBS' },
   { value: 'sprint', label: 'スプリント' },
+  { value: 'timeline', label: 'タイムライン' },
   { value: 'list', label: '一覧' },
   { value: 'cal', label: 'カレンダー' },
   { value: 'board', label: '進捗' },
@@ -318,16 +320,126 @@ function wbsMode(tasks, cfg) {
       const addBtn = n.level < WBS_MAX
         ? h('button', { type: 'button', class: 'tb-btn tb-wbs-add', title: 'この下に足す', 'aria-label': `「${n.task.title}」の下に足す`, onclick: () => { wbsAdding = n.task.id; cfg.rerender(); } }, '＋')
         : h('span', { class: 'tb-wbs-add is-none' });
-      rows.push(h('div', { class: `tb-wbs-row is-l${n.level}${leaf ? ' is-leaf' : ''}` }, card, pick, addBtn));
+      rows.push(h('div', { class: `tb-wbs-row is-l${n.level}${leaf ? ' is-leaf' : ''}`, 'data-drop': `wbs:${n.task.id}`, 'data-drop-ok': n.level < WBS_MAX }, card, pick, addBtn));
       if (wbsAdding === n.task.id) rows.push(h('div', { class: `tb-wbs-row is-l${Math.min(n.level + 1, WBS_MAX)} is-adder` }, wbsAdder(cfg, n.task.id)));
       walk(n.kids);
     }
   };
   walk(wbsTree(cfg.project));
+  // 行を別の行へ引きずる → その行の下へ（親を付け替える）。一番下の欄へ → いちばん上の段へ
+  const root = rows.length ? h('div', { class: 'tb-wbs' }, rows,
+    h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段に')) : null;
+  if (root) enableDrag(root, { rootSel: '.tb-wbs', onDrop: ({ id, toKey }) => {
+    const to = toKey.slice(4) || null;
+    const task = getTasks().find((x) => x.id === id);
+    if (!task || (task.parent || null) === to || id === to) return;
+    if (to && !parentChoices(cfg.project, id).some((c) => c.id === to)) {
+      showToast('そこには入れられません（3段を超えるか、自分の下です）');
+      cfg.rerender();
+      return;
+    }
+    updateTask(id, { parent: to }).catch((err) => showToast(`動かせませんでした（${err.message || err}）`));
+    const entry = lastHistory();
+    const toName = to ? getTasks().find((x) => x.id === to)?.title : 'いちばん上の段';
+    showToast(`「${task.title}」を「${toName}」${to ? 'の下' : ''}へ`, { action: '元に戻す', onAction: () => undo(entry) });
+  } });
   return [
-    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。親を変える時は、行を押して編集の「親」から。'),
-    rows.length ? h('div', { class: 'tb-wbs' }, rows) : h('p', { class: 'tb-empty' }, 'まだ何もありません'),
+    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。行を別の行へ引きずると、その下へ移ります。'),
+    root || h('p', { class: 'tb-empty' }, 'まだ何もありません'),
     wbsAdding === '' ? wbsAdder(cfg, null) : h('button', { type: 'button', class: 'tb-btn tb-addphase', onclick: () => { wbsAdding = ''; cfg.rerender(); } }, '＋ 項目を追加'),
+  ];
+}
+
+// ---- タイムライン ----
+// スプリントの期間を横のバーで並べる（上に WBS の1段目＝大項目の期間、下にスプリント）。縦線は1日、濃い線は週の区切り、赤は今日。
+// スプリントのバーを引きずると日付がずれる（「後ろもまとめて」で以降も一緒に）。大項目の期間は、下の作業が入っているスプリントから出す
+let tlZoom = 'week';
+let tlChain = true;
+function timelineMode(tasks, cfg) {
+  cfg.setContext({ ...cfg.baseCtx });
+  const sps = getSprints(cfg.project);
+  const px = tlZoom === 'week' ? 28 : 10;
+  const t = todayKey();
+  const first = sps.length ? (sps[0].start < t ? sps[0].start : t) : t;
+  const start = addDays(first, -((fromKey(first).getDay() + 6) % 7) - 7); // 最初の週の1週前の月曜から
+  const lastEnd = sps.length ? addDays(sps[sps.length - 1].start, sps[sps.length - 1].days) : t;
+  const span = Math.max(tlZoom === 'week' ? 35 : 84, Math.round((fromKey(lastEnd) - fromKey(start)) / 86400000) + 14);
+  const dx = (key) => Math.round((fromKey(key) - fromKey(start)) / 86400000) * px;
+  const lines = [];
+  const labels = [];
+  for (let i = 0; i <= span; i++) {
+    const d = addDays(start, i);
+    const mon = fromKey(d).getDay() === 1;
+    if (tlZoom === 'week' || mon) lines.push(h('i', { class: 'tb-tl-v' + (mon ? ' is-week' : ''), style: `left:${i * px}px` }));
+    if (mon) labels.push(h('span', { style: `left:${i * px}px` }, md(d)));
+  }
+  const lane = (bar) => h('div', { class: 'tb-tl-lane', style: `width:${(span + 1) * px}px` },
+    lines.map((x) => x.cloneNode()), h('i', { class: 'tb-tl-today', style: `left:${dx(t)}px` }), bar);
+  const rows = [h('div', { class: 'tb-tl-row is-head' }, h('div', { class: 'tb-tl-label' }, '週の始まり'), h('div', { class: 'tb-tl-days', style: `width:${(span + 1) * px}px` }, labels))];
+  // 大項目（WBSの1段目で、下に作業があるもの）
+  const leafIds = (n) => (n.kids.length ? n.kids.flatMap(leafIds) : [n.task]);
+  for (const n of wbsTree(cfg.project).filter((x) => x.kids.length)) {
+    const leaves = leafIds(n);
+    const inS = sps.filter((sp) => leaves.some((x) => x.sprint === sp.id));
+    const done = leaves.filter((x) => !isOpen(x)).length;
+    let bar = null;
+    if (inS.length) {
+      const a = inS[0].start;
+      const b = inS.reduce((m, sp) => { const e = addDays(sp.start, sp.days); return e > m ? e : m; }, a);
+      bar = h('div', { class: 'tb-tl-bar is-big', style: `left:${dx(a)}px;width:${dx(b) - dx(a)}px` },
+        h('i', { style: `width:${leaves.length ? (done / leaves.length) * 100 : 0}%` }), n.task.title);
+    }
+    rows.push(h('div', { class: 'tb-tl-row' }, h('div', { class: 'tb-tl-label is-big' }, n.task.title), lane(bar)));
+  }
+  // スプリント
+  for (const sp of sps) {
+    const items = tasks.filter((x) => x.sprint === sp.id && !hasChildren(x.id));
+    const done = items.filter((x) => !isOpen(x)).length;
+    const bar = h('div', { class: 'tb-tl-bar' + (sprintState(sp) === 'now' ? ' is-now' : ''), 'data-sp': sp.id, style: `left:${dx(sp.start)}px;width:${sp.days * px}px`, title: '引きずって日付をずらす' },
+      h('i', { style: `width:${items.length ? (done / items.length) * 100 : 0}%` }), `${sp.name}（${items.length}件）`);
+    bar.addEventListener('pointerdown', (e) => {
+      if (e.button) return;
+      e.preventDefault();
+      const x0 = e.clientX;
+      const left0 = dx(sp.start);
+      const others = tlChain ? [...bar.closest('.tb-tl').querySelectorAll('.tb-tl-bar[data-sp]')].filter((b2) => b2 !== bar && sps.findIndex((s) => s.id === b2.dataset.sp) > sps.indexOf(sp)) : [];
+      const oLeft = others.map((b2) => parseFloat(b2.style.left));
+      bar.setPointerCapture(e.pointerId);
+      const move = (ev) => {
+        const d = Math.round((ev.clientX - x0) / px);
+        bar.style.left = `${left0 + d * px}px`;
+        others.forEach((b2, i) => { b2.style.left = `${oLeft[i] + d * px}px`; });
+      };
+      const up = (ev) => {
+        bar.removeEventListener('pointermove', move);
+        bar.removeEventListener('pointerup', up);
+        bar.removeEventListener('pointercancel', up);
+        const d = Math.round((ev.clientX - x0) / px);
+        if (!d) { cfg.rerender(); return; }
+        shiftSprints(cfg.project, sp.id, d, tlChain);
+        const entry = lastHistory();
+        showToast(`${sp.name}${tlChain ? '以降' : ''}を${d > 0 ? `${d}日後ろ` : `${-d}日前`}へずらしました`, { action: '元に戻す', onAction: () => undo(entry) });
+        cfg.rerender();
+      };
+      bar.addEventListener('pointermove', move);
+      bar.addEventListener('pointerup', up);
+      bar.addEventListener('pointercancel', up);
+    });
+    rows.push(h('div', { class: 'tb-tl-row' }, h('div', { class: 'tb-tl-label' }, sp.name), lane(bar)));
+  }
+  const backlog = tasks.filter((x) => isOpen(x) && !hasChildren(x.id) && !(x.sprint && sps.some((sp) => sp.id === x.sprint)));
+  const chain = h('input', { type: 'checkbox', onchange: (e) => { tlChain = e.target.checked; } });
+  chain.checked = tlChain;
+  return [
+    h('div', { class: 'tb-tl-tools' },
+      h('label', { class: 'tb-tl-chain' }, chain, '後ろもまとめてずらす'),
+      h('div', { class: 'tb-seg', role: 'group', 'aria-label': '表示の幅' },
+        [['week', '週'], ['month', '月']].map(([v, l]) => h('button', { type: 'button', class: 'tb-seg-btn' + (tlZoom === v ? ' is-active' : ''), onclick: () => { tlZoom = v; cfg.rerender(); } }, l))),
+      h('span', { class: 'tb-empty' }, '緑＝スプリント（引きずってずらせる）、青＝大項目、赤い線＝今日。濃い色は終わった割合。')),
+    sps.length ? h('div', { class: 'tb-tl' }, rows) : h('p', { class: 'tb-empty' }, 'スプリントがありません（「スプリント」で作れます）'),
+    h('section', { class: 'tb-sec tb-tl-drawer' },
+      sectionHead('期間の決まっていない作業（バックログ）', backlog.length),
+      backlog.length ? h('div', { class: 'tb-cards tb-strip-cards is-all' }, backlog.map((x) => taskCard(x, { areaInMeta: true }))) : null),
   ];
 }
 
@@ -607,6 +719,7 @@ export function renderModes(tasks, cfg) {
   showPhase = false; // フェーズの印（F2）はスプリントに置き換えたので出さない
   const body = mode === 'wbs' ? wbsMode(tasks, cfg)
     : mode === 'sprint' ? sprintMode(tasks, cfg)
+    : mode === 'timeline' ? timelineMode(tasks, cfg)
     : mode === 'cols' ? colsMode(tasks, cfg, s)
     : mode === 'cal' ? calMode(tasks, cfg, s)
       : mode === 'board' ? boardMode(tasks, cfg)

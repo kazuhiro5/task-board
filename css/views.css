@@ -180,11 +180,13 @@
   overflow-x: auto; overscroll-behavior-x: contain; padding: 0 0 6px; scroll-snap-type: x proximity;
 }
 /* 帯のカードは同じ大きさにそろえる（名前は4行まで・印は1行まで。はみ出しは「…」） */
-.tb-strip-cards > .tb-card { scroll-snap-align: start; font-size: 13px; height: 112px; overflow: hidden; }
+.tb-strip-cards > .tb-card { scroll-snap-align: start; font-size: 13px; height: 120px; overflow: hidden; }
 .tb-strip-cards > .tb-card .tb-title { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .tb-strip-cards > .tb-card .tb-meta { flex-wrap: nowrap; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .tb-strip-cards > .tb-card .tb-memo { display: none; }
-.tb-strip-cards > .tb-card .tb-body { justify-content: space-between; align-self: stretch; padding-top: 6px; padding-bottom: 6px; }
+.tb-strip-cards > .tb-card .tb-body { justify-content: space-between; align-self: stretch; padding-top: 12px; padding-bottom: 8px; }
+/* 完了の丸は名前の1行目の高さにそろえる（縦の真ん中だと、名前が長い時に離れて見えるため） */
+.tb-strip-cards > .tb-card .tb-check { align-self: stretch; place-items: start center; min-height: 0; padding-top: 16px; }
 .tb-strip-cards > .tb-card .tb-line { align-items: flex-start; }
 .tb-strip-cards > .tb-card .tb-meta { display: block; margin-top: auto; }
 .tb-strip-cards > .tb-card .tb-meta > * { margin-right: 6px; }
@@ -645,3 +647,39 @@
   .tb-wbs-row.is-l2 { padding-left: 14px; }
   .tb-wbs-row.is-l3 { padding-left: 28px; }
 }
+
+/* ---- ホーム ---- */
+.tb-home { max-width: 1080px; }
+.tb-home-notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; }
+.tb-home-note { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); padding: 2px 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.tb-home-note.is-over { color: var(--danger); border-color: currentColor; }
+.tb-home-proj { margin-bottom: 16px; }
+.tb-home-phead .tb-sec-title { font-size: 15px; }
+.tb-home-sp { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* WBS：いちばん上の段へ移す欄（引きずっている時だけ目立つ） */
+.tb-wbs-top { margin-top: 4px; padding: 8px 12px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: var(--radius); text-align: center; }
+.tb-wbs .tb-wbs-row[data-drop] { border-radius: var(--radius); }
+
+/* ---- タイムライン ---- */
+.tb-tl-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 10px; font-size: 13px; }
+.tb-tl-tools .tb-seg { flex: 0 0 auto; }
+.tb-tl-chain { display: inline-flex; align-items: center; gap: 6px; }
+.tb-tl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.tb-tl-row { display: flex; border-top: 1px solid var(--line); width: max-content; min-width: 100%; }
+.tb-tl-row.is-head { border-top: 0; }
+.tb-tl-label { position: sticky; left: 0; z-index: 4; flex: none; width: 140px; padding: 0 10px; display: flex; align-items: center; font-size: 13px; background: var(--surface); border-right: 1px solid var(--line); min-height: 44px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tb-tl-label.is-big { font-weight: 700; color: var(--cat-univ); }
+.tb-tl-row.is-head .tb-tl-label { min-height: 30px; font-size: 12px; color: var(--muted); }
+.tb-tl-days { position: relative; height: 30px; font-size: 12px; color: var(--muted); }
+.tb-tl-days span { position: absolute; top: 6px; transform: translateX(4px); white-space: nowrap; }
+.tb-tl-lane { position: relative; height: 44px; flex: none; }
+.tb-tl-v { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--line) 55%, transparent); }
+.tb-tl-v.is-week { background: var(--line); }
+.tb-tl-today { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); z-index: 3; }
+.tb-tl-bar { position: absolute; top: 8px; height: 28px; z-index: 2; overflow: hidden; white-space: nowrap; padding: 4px 8px; font-size: 12px; font-weight: 700; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent-weak); color: var(--accent); cursor: grab; touch-action: none; user-select: none; }
+.tb-tl-bar.is-now { box-shadow: 0 0 0 2px var(--accent); }
+.tb-tl-bar > i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 25%, transparent); z-index: -1; }
+.tb-tl-bar.is-big { border-color: var(--cat-univ); color: var(--cat-univ); background: color-mix(in srgb, var(--cat-univ) 12%, var(--surface)); cursor: default; }
+.tb-tl-bar.is-big > i { background: color-mix(in srgb, var(--cat-univ) 22%, transparent); }
+.tb-tl-drawer { margin-top: 14px; }

@@ -11,6 +11,7 @@ import { mountAdd } from './add.js';
 import { inlineAdder } from './views/card.js';
 import { renderManageAreas, renderManageProjects } from './views/manage.js';
 import { renderToday } from './views/today.js';
+import { renderHome } from './views/home.js';
 import { renderWeek } from './views/week.js';
 import { renderList } from './views/list.js';
 import { renderProjects } from './views/projects.js';
@@ -22,6 +23,7 @@ import { writeBackup, lastBackupLabel, readBackup } from './backup.js';
 
 // アイコン（24×24、線のみ。外部読み込みなし）
 const ICONS = {
+  home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
   today: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   week: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   list: '<path d="M9 6h12M9 12h12M9 18h12"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>',
@@ -37,6 +39,7 @@ const ICONS = {
 const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[k]}</svg>`;
 
 const VIEWS = {
+  home: { label: 'ホーム', render: renderHome },
   today: { label: '今日', render: renderToday },
   week: { label: '週', render: renderWeek },
   projects: { label: 'プロジェクト', render: renderProjects },
@@ -50,7 +53,7 @@ const ALL_VIEWS = { ...VIEWS, trash: { label: 'ゴミ箱', render: renderTrash }
 const SIDE_PROJECTS = 8; // 左の一覧に出すプロジェクトの数（最近触った順）
 
 // 画面の状態。ctx は画面から入力欄へ渡す「今開いている分類」（初期値に使う）
-const savedView = loadPref('view', 'today');
+const savedView = loadPref('view', 'home');
 const state = {
   view: VIEWS[savedView] ? savedView : 'today',
   params: {},
