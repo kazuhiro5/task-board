@@ -1,8 +1,8 @@
 // 画面「ホーム」：今日やることと、プロジェクトの今を一目で。
 //   左上：今日のタスクを横に並ぶブロックで（期限切れ・持ち越しは件数のボタンだけ。押すと今日の画面へ）
-//   左下：プロジェクト。上にプロジェクトのカード、押したプロジェクトの中身を下に。
+//   左下：右のカードで選んだプロジェクトの中身。
 //         「スプリント一覧」＝今と次のスプリントの作業、「タイムライン一覧」＝大項目とスプリントの期間の横のバー（全体像）
-//   右：今日の Google カレンダーの予定と、ミニカレンダー（予定のある日・締切ややる日のある日に点）
+//   右：今日の Google カレンダーの予定と、ミニカレンダー（予定のある日・締切ややる日のある日に点）、その下にプロジェクトのカード（2列）
 // 今日のタスクは今日・週と同じく「プロジェクトも表示」に従う（ふだんはプロジェクトの作業を出さない）。
 import { todayKey, addDays, fromKey, toKey } from '../dates.js';
 import { h, isOpen, md, dueTone, areaDot, toggleDone } from './card.js';
@@ -60,7 +60,12 @@ function projectCards(names, cur, rawTasks, rerender) {
     const rate = pmode === 'sprint' ? (inside.length ? done / inside.length : 0) : (all.length ? allDone / all.length : 0);
     return h('button', {
       type: 'button', class: 'hm-pchip' + (cur === name ? ' is-on' : ''),
-      onclick: () => { openProject = name; rerender(); },
+      onclick: () => {
+        openProject = name;
+        rerender();
+        // 1列になる幅ではカードが中身より下にあるので、選んだ中身まで送る
+        if (window.matchMedia('(max-width: 1100px)').matches) document.querySelector('.hm-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      },
     }, h('b', {}, name), h('small', {}, sub), h('span', { class: 'hm-bar' }, h('i', { style: `width:${rate * 100}%` })));
   }));
 }
@@ -195,10 +200,11 @@ export function renderHome(container, rawTasks, opts) {
           type: 'button', class: 'tb-seg-btn' + (pmode === v ? ' is-active' : ''), 'aria-pressed': String(pmode === v),
           onclick: () => { pmode = v; opts.rerender(); },
         }, l)))),
-    names.length ? [
-      projectCards(names, cur, rawTasks, opts.rerender),
-      h('div', { class: 'hm-detail' }, pmode === 'sprint' ? sprintDetail(cur, rawTasks, opts.navigate) : timelineDetail(cur, rawTasks, opts.navigate)),
-    ] : h('p', { class: 'tb-empty' }, '動いているプロジェクトはありません'));
+    names.length
+      ? h('div', { class: 'hm-detail' }, pmode === 'sprint' ? sprintDetail(cur, rawTasks, opts.navigate) : timelineDetail(cur, rawTasks, opts.navigate))
+      : h('p', { class: 'tb-empty' }, '動いているプロジェクトはありません'));
+  // プロジェクトのカードは右の列に縦に並べる（左の上に置くと、中身を見るのにスクロールが要るため）
+  const projCard = names.length ? h('section', { class: 'hm-card' }, h('h2', { class: 'hm-title' }, 'プロジェクト'), projectCards(names, cur, rawTasks, opts.rerender)) : null;
 
   container.replaceChildren(h('div', { class: 'hm' },
     h('div', {},
@@ -208,5 +214,5 @@ export function renderHome(container, rawTasks, opts) {
         todays.length ? h('div', { class: 'hm-tiles' }, todays.map((x) => tile(x, opts.rerender)))
           : h('p', { class: 'tb-empty' }, '今日のタスクはありません')),
       projSec),
-    h('aside', { class: 'hm-side' }, calendarCard(opts.rerender), miniCalendar(rawTasks, opts.navigate, opts.rerender))));
+    h('aside', { class: 'hm-side' }, calendarCard(opts.rerender), miniCalendar(rawTasks, opts.navigate, opts.rerender), projCard)));
 }

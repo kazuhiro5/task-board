@@ -782,7 +782,7 @@
 .hm-tl-bar > i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 25%, transparent); z-index: -1; }
 .hm-tl-days span { position: absolute; top: 4px; transform: translateX(3px); }
 /* 右：Googleカレンダー */
-.hm-side { display: grid; gap: 16px; position: sticky; top: 60px; }
+.hm-side { display: grid; gap: 16px; }
 .hm-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .hm-ev { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .hm-ev li { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
@@ -811,3 +811,7 @@
 @media (max-width: 599.98px) { .hm-tiles { gap: 8px; } .hm-tile { min-height: 96px; padding: 10px; } .hm-pchip { min-width: 0; flex: 1 1 calc(50% - 8px); } }
 
 .hm-tl-none { position: absolute; left: 8px; top: 9px; font-size: 11px; color: var(--muted); z-index: 2; }
+.hm-side .hm-projs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.hm-side .hm-pchip { min-width: 0; padding: 8px 10px; }
+.hm-side .hm-pchip b { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.hm-side .hm-pchip small { font-size: 11px; }
