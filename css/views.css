@@ -683,3 +683,15 @@
 .tb-tl-bar.is-big { border-color: var(--cat-univ); color: var(--cat-univ); background: color-mix(in srgb, var(--cat-univ) 12%, var(--surface)); cursor: default; }
 .tb-tl-bar.is-big > i { background: color-mix(in srgb, var(--cat-univ) 22%, transparent); }
 .tb-tl-drawer { margin-top: 14px; }
+
+/* WBS を引きずっている時：線で「間に入る」とは見せず、落とす先の行を大きく光らせて「この下に入れる」と出す
+   （親子の付け替えだけで、並べ替えはしないため） */
+.tb-dragging:has(.tb-wbs .is-drag-src) .tb-drop-line { display: none; }
+.tb-dragging .tb-wbs-row.is-drop-ok { outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
+.tb-dragging .tb-wbs-row.is-drop-over { position: relative; outline: 2px solid var(--accent); background: var(--accent-weak); }
+.tb-dragging .tb-wbs-row.is-drop-over::after {
+  content: "▼ この下に入れる"; position: absolute; left: 12px; top: -11px; z-index: 5;
+  background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 10px; pointer-events: none;
+}
+.tb-dragging .tb-wbs-top.is-drop-over { outline: 2px solid var(--accent); background: var(--accent-weak); color: var(--accent); font-weight: 700; }
+.tb-dragging .tb-wbs-top { padding: 14px 12px; }
