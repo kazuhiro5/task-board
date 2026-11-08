@@ -733,3 +733,6 @@
 .tb-dragging .tb-wbs-row.is-drop-over[data-mode="after"] { box-shadow: 0 3px 0 0 var(--accent); }
 .tb-dragging .tb-wbs-row.is-drop-over[data-mode="before"]::after { content: "▲ この上に並べる"; }
 .tb-dragging .tb-wbs-row.is-drop-over[data-mode="after"]::after { content: "▼ この下に並べる"; top: auto; bottom: -11px; }
+
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="into"] { background: linear-gradient(to right, transparent 50%, var(--accent-weak) 50%); }
+.tb-dragging .tb-wbs-row.is-drop-over[data-mode="into"]::after { left: auto; right: 60px; }

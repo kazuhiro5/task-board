@@ -329,27 +329,27 @@ function wbsMode(tasks, cfg) {
     }
   };
   walk(wbsTree(cfg.project));
-  // 行を引きずって落とす：行の上の端＝その上に並べる、下の端＝その下に並べる、真ん中＝その中に入れる（子にする）。
-  // 3段目の行には中へ入れられないので、上半分＝上、下半分＝下。一番下の欄へ落とすといちばん上の段の最後へ
-  const modeOf = (zone, y) => {
+  // 行を引きずって落とす：行の右寄り＝その中に入れる（子にする）、左寄り＝そのタスクの下に並べる、
+  // 行の上の端＝その上に並べる（先頭へ動かす時のため）。3段目の行には中へ入れられないので、右寄りでも下に並べる。
+  // 一番下の欄へ落とすと、いちばん上の段の最後へ
+  const modeOf = (zone, x, y) => {
     const r = zone.getBoundingClientRect();
-    const f = (y - r.top) / Math.max(1, r.height);
+    if ((y - r.top) / Math.max(1, r.height) < 0.2) return 'before';
     const canInto = zone.dataset.into === '1';
-    if (!canInto) return f < 0.5 ? 'before' : 'after';
-    return f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'into';
+    return canInto && x > r.left + r.width * 0.5 ? 'into' : 'after';
   };
   const root = rows.length ? h('div', { class: 'tb-wbs' }, rows,
     h('div', { class: 'tb-wbs-top', 'data-drop': 'wbs:', 'data-drop-ok': true }, 'ここへ引きずると、いちばん上の段の最後に')) : null;
   if (root) enableDrag(root, {
     rootSel: '.tb-wbs',
-    onHover: (zone, x, y) => { if (zone.dataset.drop !== 'wbs:') zone.dataset.mode = modeOf(zone, y); },
-    onDrop: ({ id, toKey, toZone, y }) => {
+    onHover: (zone, x, y) => { if (zone.dataset.drop !== 'wbs:') zone.dataset.mode = modeOf(zone, x, y); },
+    onDrop: ({ id, toKey, toZone, x, y }) => {
       const all = getTasks();
       const byId = new Map(all.map((x) => [x.id, x]));
       const task = byId.get(id);
       const targetId = toKey.slice(4) || null;
       if (!task || id === targetId) return;
-      const mode = targetId ? modeOf(toZone, y) : 'end';
+      const mode = targetId ? modeOf(toZone, x, y) : 'end';
       const target = targetId ? byId.get(targetId) : null;
       // 新しい親と、同じ親の中の並び（order）
       const parent = mode === 'into' ? targetId : mode === 'end' ? null : (target.parent && byId.get(target.parent) && !byId.get(target.parent).deletedAt ? target.parent : null);
@@ -377,7 +377,7 @@ function wbsMode(tasks, cfg) {
     },
   });
   return [
-    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。行を引きずって、ほかの行の真ん中に落とすとその中へ、上下の端に落とすとその上・下に並びます。'),
+    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。行を引きずって、ほかの行の右寄りに落とすとその中へ、左寄りに落とすとその下に並びます。'),
     root || h('p', { class: 'tb-empty' }, 'まだ何もありません'),
     wbsAdding === '' ? wbsAdder(cfg, null) : h('button', { type: 'button', class: 'tb-btn tb-addphase', onclick: () => { wbsAdding = ''; cfg.rerender(); } }, '＋ 項目を追加'),
   ];

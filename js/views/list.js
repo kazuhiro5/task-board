@@ -12,6 +12,7 @@ import { areaNames, addArea } from '../store.js';
 import { h, isOpen, compareTasks, taskCard, sectionHead, areaDot, inlineAdder } from './card.js';
 import { addMoves, doneItems, dropToGroup } from './modes.js';
 import { enableDrag } from './dnd.js';
+import { projectToggle, visibleTasks } from './filter.js';
 import { sorter } from './sort.js';
 
 const TABS = [
@@ -159,7 +160,8 @@ function statusTab(scoped, opts) {
   return [h('div', { class: 'tb-listbar' }, areaPick(opts)), prog];
 }
 
-export function renderList(container, tasks, opts) {
+export function renderList(container, rawTasks, opts) {
+  const tasks = visibleTasks(rawTasks, null);
   const params = opts.params || {};
   const sig = JSON.stringify(params);
   if (sig !== lastParams) { lastParams = sig; areaFilter = params.area || null; picked = null; }
@@ -180,7 +182,7 @@ export function renderList(container, tasks, opts) {
   // 用途タブ以外でも、絞り込み中なら同じ形で出す（ここから解除できるように）
 
   container.replaceChildren(h('div', { class: 'tb-list' },
-    h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender)),
+    h('div', { class: 'tb-list-top' }, tabStrip(tab, opts.rerender), projectToggle(opts.rerender)),
     h('div', { class: `tb-ctab-panel is-${tab}`, id: 'tb-ctab-panel', role: 'tabpanel', 'aria-labelledby': `tb-ctab-${tab}` },
       tab === 'status' ? statusTab(scoped, opts) : tab === 'noarea' ? noareaTab(scoped, opts) : areaTab(scoped, opts))));
 }

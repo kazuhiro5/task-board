@@ -7,7 +7,7 @@
 //   キーボード：行で Alt+↑/↓ → 同じ区分の中で1つ上/下、Alt+←/→ → cfg.onKey に任せる（前後の日）
 //
 // enableDrag(rootEl, cfg)：描画のたびに新しい根の要素に付ける。
-//   cfg = { rootSel, onDrop({ id, fromKey, toKey, toZone, finalIds, y }), onKey?(id, fromKey, dir), onHover?(zone, x, y) }
+//   cfg = { rootSel, onDrop({ id, fromKey, toKey, toZone, finalIds, x, y }), onKey?(id, fromKey, dir), onHover?(zone, x, y) }
 //   引きずっている間に描き直されても、rootSel で今の根を探し直す。
 import { getTasks, group, lastHistory, undo } from '../store.js';
 import { showToast } from '../toast.js';
@@ -233,7 +233,7 @@ function finish(drop) {
   }
   swallowClick(cur.x, cur.y);
   if (drop && cur.target) {
-    cur.cfg.onDrop({ id: cur.id, fromKey: cur.fromKey, toKey: cur.target.key, toZone: cur.target.zone, finalIds: cur.target.finalIds, y: cur.y });
+    cur.cfg.onDrop({ id: cur.id, fromKey: cur.fromKey, toKey: cur.target.key, toZone: cur.target.zone, finalIds: cur.target.finalIds, x: cur.x, y: cur.y });
   }
 }
 

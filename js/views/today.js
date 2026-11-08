@@ -12,7 +12,7 @@
 //   書いた直後に「◯件を動かしました・元に戻す」（元のやる日・締切に戻す）。
 import { todayKey, toKey, addDays, label } from '../dates.js';
 import { h, isOpen, taskCard, sectionHead } from './card.js';
-import { filterPick } from './filter.js';
+import { filterPick, projectToggle, visibleTasks } from './filter.js';
 import { sorter } from './sort.js';
 import { enableDrag, dropToDay } from './dnd.js';
 import { updateMany, areaNames, projectNames, lastHistory, undo } from '../store.js';
@@ -165,7 +165,8 @@ function section(title, list, cardOpts, attrs = {}, dnd = {}) {
 const dayCard = (x) => (x.doDate ? { hide: ['doDate'] } : { dueMark: true });
 const placeKey = (x) => x.doDate || x.dueDate;
 
-export function renderToday(container, tasks, opts) {
+export function renderToday(container, rawTasks, opts) {
+  const tasks = visibleTasks(rawTasks, filter);
   const t = todayKey();
   const tomorrow = addDays(t, 1);
   const limit = addDays(t, AHEAD);
@@ -218,7 +219,8 @@ export function renderToday(container, tasks, opts) {
 
   // 絞り込み（今日・週・プロジェクトで同じ部品。filter.js）
   const topBar = h('div', { class: 'tb-today-top' },
-    filterPick({ tasks, value: filter, kinds: ['area', 'project'], onChange: (v) => { filter = v; opts.rerender(); } }));
+    filterPick({ tasks: rawTasks, value: filter, kinds: ['area', 'project'], onChange: (v) => { filter = v; opts.rerender(); } }),
+    projectToggle(opts.rerender));
   const chips = null;
   const filterBar = null;
 
