@@ -1,5 +1,5 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo } from '../store.js';
+import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo, parentPath } from '../store.js';
 import { showToast } from '../toast.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
@@ -203,6 +203,8 @@ export function taskCard(task, opts = {}) {
   const rep = repeatLabel(task.repeat);
   if (rep) meta.push(h('span', { class: 'tb-tag tb-rep', title: `繰り返し：${rep}` }, `↻${rep}`));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
+  // WBSの親（例：企画 › 要件定義）。どの作業の一部かが分かるように
+  if (task.parent && !hide.has('parent')) { const pp = parentPath(task.id); if (pp.length) meta.push(h('span', { class: 'tb-tag tb-tag--parent' }, pp.join(' › '))); }
   if (task.carried && !done && task.sprint && !hide.has('carried')) meta.push(h('span', { class: 'tb-tag tb-tag--badge' }, '持ち越し'));
   if (opts.showPhase && task.phase && !hide.has('phase')) {
     meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));

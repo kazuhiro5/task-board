@@ -10,14 +10,14 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo } from './store.js';
+import { updateTask, deleteTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo, parentChoices } from './store.js';
 import { showToast } from './toast.js';
 import { todayKey, addDays } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 
 // size（大中小）はなくした。古いタスクに値が残っていても、ここでは出さず書き換えもしない
-const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'sprint', 'priority', 'repeat', 'memo'];
+const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'parent', 'sprint', 'priority', 'repeat', 'memo'];
 const WIDE = '(min-width: 840px)';
 
 let dialog = null;
@@ -269,8 +269,19 @@ export function openEdit(task) {
   const phaseChips = el('div', { class: 'tag-chips' });
   const phaseField = field('スプリント', [phaseChips]);
   let sprintOf = v.project;
+  // WBSの親：同じプロジェクトの2段目までのタスク（自分と自分の下は選べない）
+  const parentSel = el('select', { class: 'tag-select', 'aria-label': '親', onchange: (e) => { v.parent = e.target.value || null; } });
+  const parentField = field('親（WBS）', [parentSel]);
+  function renderParent() {
+    const list = v.project ? parentChoices(v.project, task.id) : [];
+    parentField.style.display = list.length ? '' : 'none';
+    if (v.parent && !list.some((x) => x.id === v.parent)) v.parent = null;
+    parentSel.replaceChildren(el('option', { value: '', text: 'いちばん上の段' }), ...list.map((x) => el('option', { value: x.id, text: `${'　'.repeat(x.level - 1)}${x.level > 1 ? '└ ' : ''}${x.title}` })));
+    parentSel.value = v.parent || '';
+  }
   function renderPhase() {
-    if (v.project !== sprintOf) { v.sprint = null; sprintOf = v.project; }
+    if (v.project !== sprintOf) { v.sprint = null; v.parent = null; sprintOf = v.project; }
+    renderParent();
     phaseField.style.display = v.project ? '' : 'none'; // .edit-field は display 指定があり hidden が効かないため
     if (!v.project) { phaseChips.replaceChildren(); return; }
     const list = getSprints(v.project);
@@ -345,6 +356,7 @@ export function openEdit(task) {
       field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
       field('用途', [chipControl('area', areaNames())]),
       field('プロジェクト', [projInput, projChips]),
+      parentField,
       phaseField,
       field('優先度', [chipControl('priority', PRIORITIES)]),
       field('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),

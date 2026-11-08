@@ -5,7 +5,7 @@
 //   スプリント＝プロジェクトの中の期間（store の getSprints）。タスクを入れていないものはバックログ。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
 import { updateTask, areaNames, phaseName, renamePhase, deletePhase, lastHistory, undo, group, getTasks,
-  getSprints, addSprint, updateSprint, deleteSprint, sprintState, SPRINT_LENGTHS } from '../store.js';
+  getSprints, addSprint, updateSprint, deleteSprint, sprintState, SPRINT_LENGTHS, wbsTree, hasChildren, addTask, WBS_MAX } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot, moreMenu } from './card.js';
@@ -22,6 +22,7 @@ function taskCard(x, o = {}) {
 }
 
 export const MODES = [
+  { value: 'wbs', label: 'WBS' },
   { value: 'sprint', label: 'スプリント' },
   { value: 'list', label: '一覧' },
   { value: 'cal', label: 'カレンダー' },
@@ -270,6 +271,66 @@ function listMode(tasks, cfg, s) {
     key === 'sprint' ? null : addPhaseBtn(cfg)];
 }
 
+// ---- WBS ----
+// プロジェクトでやることを 親 → 子 → 孫 の3段で書き出す。下に何も無い作業（葉）は右でスプリントを選ぶ。
+// 各行の「＋」でその下に足し、一番下の「＋ 項目を追加」でいちばん上の段に足す。親は下の終わった割合を出す
+let wbsAdding = null; // 下に足そうとしている行の id（'' ＝いちばん上の段）
+function wbsAdder(cfg, parentId) {
+  const input = h('input', { type: 'text', class: 'tb-adder-input', placeholder: parentId ? '下に足す作業の名前' : '項目の名前（例：企画）', maxlength: '80', 'aria-label': '名前' });
+  const done = () => { wbsAdding = null; cfg.rerender(); };
+  const submit = (e) => {
+    e?.preventDefault();
+    const title = input.value.trim();
+    if (!title) { done(); return; }
+    addTask({ title, project: cfg.project, parent: parentId || null, doDate: null, area: cfg.baseCtx?.area || null })
+      .catch((err) => showToast(`足せませんでした（${err.message || err}）`));
+    input.value = '';
+    input.focus(); // 続けて足せるように開いたまま
+  };
+  const form = h('form', { class: 'tb-adder tb-wbs-adder', autocomplete: 'off', onsubmit: submit },
+    input, h('button', { type: 'submit', class: 'primary' }, '追加'), h('button', { type: 'button', class: 'tb-btn', onclick: done }, '閉じる'));
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); done(); } });
+  setTimeout(() => input.focus(), 0);
+  return form;
+}
+function wbsMode(tasks, cfg) {
+  cfg.setContext({ ...cfg.baseCtx });
+  const sps = getSprints(cfg.project);
+  const rows = [];
+  const leafStats = (n) => (n.kids.length ? n.kids.reduce((a, k) => { const s = leafStats(k); return [a[0] + s[0], a[1] + s[1]]; }, [0, 0]) : [isOpen(n.task) ? 0 : 1, 1]);
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      const leaf = !n.kids.length;
+      const [done, total] = leafStats(n);
+      const card = taskCard(n.task, { hide: ['parent', 'sprint'] });
+      const pick = leaf ? (() => {
+        const sel = h('select', {
+          class: 'tb-wbs-pick' + (n.task.sprint ? '' : ' is-backlog'), 'aria-label': 'スプリント',
+          onchange: (e) => {
+            updateTask(n.task.id, { sprint: e.target.value || null, carried: false }).catch((err) => showToast(`保存できませんでした（${err.message || err}）`));
+            const entry = lastHistory();
+            showToast(`「${n.task.title}」を${e.target.value ? sps.find((x) => x.id === e.target.value)?.name : 'バックログ'}へ`, { action: '元に戻す', onAction: () => undo(entry) });
+          },
+        }, h('option', { value: '' }, 'バックログ'), sps.map((sp) => h('option', { value: sp.id }, `${sp.name}（${sprintDates(sp)}）${sprintState(sp) === 'now' ? '・今' : sprintState(sp) === 'past' ? '・終了' : ''}`)));
+        sel.value = n.task.sprint && sps.some((x) => x.id === n.task.sprint) ? n.task.sprint : '';
+        return sel;
+      })() : h('span', { class: 'tb-wbs-prog' }, `${done}/${total}`);
+      const addBtn = n.level < WBS_MAX
+        ? h('button', { type: 'button', class: 'tb-btn tb-wbs-add', title: 'この下に足す', 'aria-label': `「${n.task.title}」の下に足す`, onclick: () => { wbsAdding = n.task.id; cfg.rerender(); } }, '＋')
+        : h('span', { class: 'tb-wbs-add is-none' });
+      rows.push(h('div', { class: `tb-wbs-row is-l${n.level}${leaf ? ' is-leaf' : ''}` }, card, pick, addBtn));
+      if (wbsAdding === n.task.id) rows.push(h('div', { class: `tb-wbs-row is-l${Math.min(n.level + 1, WBS_MAX)} is-adder` }, wbsAdder(cfg, n.task.id)));
+      walk(n.kids);
+    }
+  };
+  walk(wbsTree(cfg.project));
+  return [
+    h('p', { class: 'tb-empty tb-sp-help' }, 'やることを 親 → 子 → 孫 の3段で書き出します。「＋」でその下に足し、下に何も無い作業は右でスプリントを選びます（選ばなければバックログ）。親を変える時は、行を押して編集の「親」から。'),
+    rows.length ? h('div', { class: 'tb-wbs' }, rows) : h('p', { class: 'tb-empty' }, 'まだ何もありません'),
+    wbsAdding === '' ? wbsAdder(cfg, null) : h('button', { type: 'button', class: 'tb-btn tb-addphase', onclick: () => { wbsAdding = ''; cfg.rerender(); } }, '＋ 項目を追加'),
+  ];
+}
+
 // ---- スプリント ----
 // スプリントの「…」：名前を変える／期間を変える／削除（中のタスクはバックログへ）
 let editingSprint = null; // 期間を直しているスプリントの id
@@ -335,7 +396,7 @@ function sprintMode(tasks, cfg) {
   const ids = new Set(sps.map((x) => x.id));
   cfg.setContext({ ...cfg.baseCtx });
   const col = (sp) => {
-    const items = tasks.filter((x) => (sp ? x.sprint === sp.id : !(x.sprint && ids.has(x.sprint)))).sort(byManual);
+    const items = tasks.filter((x) => !hasChildren(x.id) && (sp ? x.sprint === sp.id : !(x.sprint && ids.has(x.sprint)))).sort(byManual);
     const open = items.filter(isOpen);
     const shown = sp ? items : open; // バックログは未完了だけ（スプリントは終わったものも出して進み具合を見せる）
     const done = items.length - open.length;
@@ -544,7 +605,8 @@ export function renderModes(tasks, cfg) {
   const mode = loadMode(cfg.scope);
   extraHide = cfg.hide || [];
   showPhase = false; // フェーズの印（F2）はスプリントに置き換えたので出さない
-  const body = mode === 'sprint' ? sprintMode(tasks, cfg)
+  const body = mode === 'wbs' ? wbsMode(tasks, cfg)
+    : mode === 'sprint' ? sprintMode(tasks, cfg)
     : mode === 'cols' ? colsMode(tasks, cfg, s)
     : mode === 'cal' ? calMode(tasks, cfg, s)
       : mode === 'board' ? boardMode(tasks, cfg)

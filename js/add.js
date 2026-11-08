@@ -6,12 +6,12 @@
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
 // スプリントの行は、プロジェクトを選んでいる時だけ出す（終わっていないスプリントとバックログ）。初期値は getContext().sprint。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
-import { addTask, projectNames, getSprints, sprintState, areaNames, subscribe } from './store.js';
+import { addTask, projectNames, getSprints, sprintState, areaNames, subscribe, parentChoices } from './store.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor } from './repeat.js';
 
-const KEYS = ['doDate', 'dueDate', 'area', 'project', 'sprint', 'priority'];
+const KEYS = ['doDate', 'dueDate', 'area', 'project', 'parent', 'sprint', 'priority'];
 const NEW = '\u0000new'; // プロジェクトの選択肢の「＋ 新しいプロジェクト」（ふつうの名前とぶつからない値）
 
 function el(tag, props = {}, children = []) {
@@ -167,6 +167,19 @@ export function mountAdd(container, getContext) {
   }
 
   // フェーズ（1…N）。N はそのプロジェクトのフェーズの数
+  // WBSの親（どの作業の下に入れるか）。選ばなければいちばん上の段
+  function parentRow(project) {
+    const list = parentChoices(project);
+    if (!list.length) return null;
+    if (sel.parent && !list.some((x) => x.id === sel.parent)) sel.parent = null;
+    const select = el('select', {
+      class: 'tag-select', 'aria-label': '親（どの作業の下に入れるか）',
+      onchange: (e) => { sel.parent = e.target.value || null; touched.add('parent'); },
+    }, [el('option', { value: '', text: 'いちばん上の段' }), ...list.map((x) => el('option', { value: x.id, text: `${'　'.repeat(x.level - 1)}${x.level > 1 ? '└ ' : ''}${x.title}` }))]);
+    select.value = sel.parent || '';
+    return row('親', [select]);
+  }
+
   function sprintRow(project) {
     const list = getSprints(project).filter((sp) => sprintState(sp) !== 'past');
     if (sel.sprint && !list.some((sp) => sp.id === sel.sprint)) sel.sprint = null;
@@ -188,6 +201,7 @@ export function mountAdd(container, getContext) {
         newProject = v === NEW;
         sel.project = newProject || !v ? null : v;
         sel.sprint = null; // スプリントはプロジェクトごとに違うので選び直す
+        sel.parent = null;
         touched.add('project');
         touched.add('sprint');
         renderTags();
@@ -224,7 +238,7 @@ export function mountAdd(container, getContext) {
       ]),
       projectRow(),
     );
-    if (sel.project && projectNames().includes(sel.project)) tags.append(sprintRow(sel.project));
+    if (sel.project && projectNames().includes(sel.project)) { const pr = parentRow(sel.project); if (pr) tags.append(pr); tags.append(sprintRow(sel.project)); }
     prioBox.replaceChildren(simpleRow('priority', '優先度', PRIORITIES));
     for (const c of form.querySelectorAll('.tag-chips')) if (!c.dataset.wheel) { c.dataset.wheel = '1'; wheelSideways(c); }
   }
@@ -277,7 +291,7 @@ export function mountAdd(container, getContext) {
     const data = { title: name };
     for (const k of KEYS) if (sel[k]) data[k] = sel[k];
     // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
-    if (!data.project) delete data.sprint;
+    if (!data.project) { delete data.sprint; delete data.parent; }
     if (memo.trim()) data.memo = memo.trim();
     if (repeat) data.repeat = repeat;
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;

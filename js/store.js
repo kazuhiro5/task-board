@@ -161,6 +161,66 @@ export function getPhases(project) {
   return Number.isInteger(n) && n >= 1 ? n : DEFAULT_PHASES;
 }
 
+// ---- WBS（プロジェクトの中のタスクの親子。親・子・孫の3段まで） ----
+// タスクの parent に親のタスクの id。親がゴミ箱・別のプロジェクト・見つからない時は、いちばん上の段として扱う。
+// 大項目（企画・開発など）も別の項目を作らずタスクとして持つ（2026-11-08 オーナー：案A）
+export const WBS_MAX = 3;
+function liveParent(x, byId) {
+  const p = x.parent ? byId.get(x.parent) : null;
+  return p && !p.deletedAt && p.project === x.project ? p : null;
+}
+// プロジェクトの木：[{ task, level: 1..3, kids: [...] }]（並びは order）
+export function wbsTree(project) {
+  const list = tasks.filter((x) => x.project === project);
+  const byId = new Map(list.map((x) => [x.id, x]));
+  const kids = new Map();
+  const roots = [];
+  for (const x of list) {
+    const p = liveParent(x, byId);
+    if (p) { if (!kids.has(p.id)) kids.set(p.id, []); kids.get(p.id).push(x); } else roots.push(x);
+  }
+  const ord = (a, b) => ((a.order ?? a.createdAt ?? 0) - (b.order ?? b.createdAt ?? 0));
+  const build = (x, level) => ({ task: x, level, kids: level >= WBS_MAX ? [] : (kids.get(x.id) || []).sort(ord).map((c) => build(c, level + 1)) });
+  return roots.sort(ord).map((x) => build(x, 1));
+}
+// 子を持つタスクか（親になっているもの。スプリントの箱には入れず、WBSの見出しとして扱う）
+export function hasChildren(id) {
+  return tasks.some((x) => x.parent === id && !x.deletedAt);
+}
+// 何段目か（1〜3）
+export function wbsLevel(id) {
+  const byId = new Map(tasks.map((x) => [x.id, x]));
+  let n = 1;
+  let x = byId.get(id);
+  while (x && n <= WBS_MAX) { const p = liveParent(x, byId); if (!p) break; n++; x = p; }
+  return n;
+}
+// 親の名前を上から（例：['企画','要件定義']）
+export function parentPath(id) {
+  const byId = new Map(tasks.map((x) => [x.id, x]));
+  const out = [];
+  let x = byId.get(id);
+  for (let i = 0; i < WBS_MAX && x; i++) { const p = liveParent(x, byId); if (!p) break; out.unshift(p.title); x = p; }
+  return out;
+}
+// 親にできるタスク（同じプロジェクト・2段目まで・自分と自分の下は除く）
+export function parentChoices(project, selfId = null) {
+  const out = [];
+  const walk = (nodes) => {
+    for (const n of nodes) {
+      if (n.task.id === selfId) continue; // 自分と自分の下は選べない
+      if (n.level < WBS_MAX) out.push({ id: n.task.id, title: n.task.title, level: n.level });
+      walk(n.kids);
+    }
+  };
+  walk(wbsTree(project));
+  // 自分の下の段を親にすると、段が深くなりすぎる・輪になるので、選んだ親の段＋自分の下の深さが3を超えるものも除く
+  if (!selfId) return out;
+  const depth = (id) => { const k = tasks.filter((x) => x.parent === id && !x.deletedAt); return k.length ? 1 + Math.max(...k.map((c) => depth(c.id))) : 0; };
+  const d = depth(selfId);
+  return out.filter((c) => c.level + 1 + d <= WBS_MAX);
+}
+
 // ---- スプリント（プロジェクトの中の期間） ----
 // プロジェクトの文書の sprints に [{ id, name, start: 'YYYY-MM-DD', days }]。タスクは sprint に id を持つ（null＝バックログ）。
 // 期間が終わったスプリントの未完了は、まだ終わっていない次のスプリントへ自動で移す（carryOver。無ければ同じ長さで作る）。
@@ -525,6 +585,7 @@ function normalize(data) {
     project,
     phase: project ? toPhase(data.phase) : null,
     sprint: project && data.sprint ? String(data.sprint) : null,
+    parent: project && data.parent ? String(data.parent) : null,
     priority: data.priority || null,
     memo: data.memo || '',
     repeat: normRepeat(data.repeat),
@@ -558,6 +619,11 @@ export async function updateTask(id, patch) {
   if ('project' in patch && !('sprint' in patch)) {
     const was = allTasks.find((x) => x.id === id);
     if (!was || (was.project || null) !== p.project) p.sprint = null;
+  }
+  // プロジェクトが変わったら親も外す（親子は同じプロジェクトの中だけ）
+  if ('project' in patch && !('parent' in patch)) {
+    const was = allTasks.find((x) => x.id === id);
+    if (!was || (was.project || null) !== p.project) p.parent = null;
   }
   if ('repeat' in patch) p.repeat = normRepeat(patch.repeat);
 
