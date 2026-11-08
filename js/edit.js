@@ -12,7 +12,7 @@
 // 閉じたら、開いた元のカードにフォーカスを戻す。
 import { updateTask, deleteTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo, parentChoices } from './store.js';
 import { showToast } from './toast.js';
-import { todayKey, addDays } from './dates.js';
+import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 
@@ -52,12 +52,6 @@ function chip(label, selected, onClick) {
   });
 }
 
-function field(label, children) {
-  return el('div', { class: 'edit-field' }, [
-    el('span', { class: 'edit-label', text: label }),
-    el('div', { class: 'edit-control' }, children),
-  ]);
-}
 
 const isWide = () => !!wideMq?.matches;
 const isPanel = () => !!dialog?.open && dialog.classList.contains('is-panel');
@@ -203,41 +197,27 @@ export function openEdit(task) {
   const error = el('p', { class: 'add-error', role: 'alert' });
 
   const titleInput = el('input', {
-    class: 'edit-title', 'aria-label': 'タスク名',
+    class: 'edit-title', 'aria-label': 'タスク名', placeholder: 'タスク名',
     oninput: (e) => { v.title = e.target.value; error.textContent = ''; },
   });
   titleInput.value = v.title || '';
 
-  // 状態
-  const statusBox = el('div', { class: 'edit-seg' });
+  // 見た目はタスクの追加（入力欄）と同じ形：上に名前と内容、その下に「見出し＋横に流すボタン」の行。
+  // 編集だけの行は「進捗」（未着手・進行中・待ち・完了）
+  const row = (label, children, cls = '') => el('div', { class: 'tag-row' + (cls ? ` ${cls}` : '') }, [
+    el('span', { class: 'tag-label', text: label }),
+    el('div', { class: 'tag-chips' }, children),
+  ]);
+
+  // 進捗（状態）
+  const statusBox = el('div', { class: 'tag-chips' });
   function renderStatus() {
     statusBox.replaceChildren(...STATUSES.map((s) => chip(s.label, v.status === s.value, () => { v.status = s.value; renderStatus(); })));
   }
-
-  // 日付（date入力＋なし）
-  // quick：カレンダーを開かずに押せる日（やる日だけ「今日」「明日」。よく使う書き換えのため）
-  function dateControl(key, label, quick = []) {
-    const input = el('input', { type: 'date', class: 'tag-date', 'aria-label': label });
-    input.value = v[key] || '';
-    const none = chip('なし', !v[key], () => { v[key] = null; input.value = ''; sync(); });
-    const quickChips = quick.map(([l, day]) => {
-      const c = chip(l, v[key] === day, () => { v[key] = day; input.value = day; sync(); });
-      c.dataset.day = day;
-      return c;
-    });
-    function sync() {
-      for (const c of [none, ...quickChips]) {
-        const on = c === none ? !v[key] : v[key] === c.dataset.day;
-        c.classList.toggle('is-on', on);
-        c.setAttribute('aria-pressed', String(on));
-      }
-    }
-    input.addEventListener('change', () => { v[key] = input.value || null; sync(); });
-    return [input, ...quickChips, none];
-  }
+  const statusRow = el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: '進捗' }), statusBox]);
 
   // チップ1行（もう一度押すと解除）
-  function chipControl(key, options) {
+  function chipRow(key, label, options) {
     const box = el('div', { class: 'tag-chips' });
     const opts = [...options];
     if (v[key] && !opts.includes(v[key])) opts.push(v[key]);
@@ -245,33 +225,74 @@ export function openEdit(task) {
       box.replaceChildren(...opts.map((o) => chip(o, v[key] === o, () => { v[key] = v[key] === o ? null : o; render(); })));
     }
     render();
-    return box;
+    return el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: label }), box]);
   }
 
-  // プロジェクト：既存から選ぶ＋自由入力
-  const projInput = el('input', {
-    class: 'tag-newproject', placeholder: 'プロジェクト名（なしは空）', 'aria-label': 'プロジェクト',
-    oninput: (e) => { v.project = e.target.value.trim() || null; renderProj(); renderPhase(); },
-  });
-  projInput.value = v.project || '';
-  const projChips = el('div', { class: 'tag-chips' });
-  const projList = projectNames().slice(0, 6);
-  function renderProj() {
-    projChips.replaceChildren(...projList.map((p) => chip(p, v.project === p, () => {
-      v.project = v.project === p ? null : p;
-      projInput.value = v.project || '';
-      renderProj();
-      renderPhase();
-    })));
+  // やる日・締切：入力欄と同じ「なし／今日／明日（／明後日）／日付…」。決まった日以外は「日付…」の横に日付の欄
+  function dateRow(key, label, presets) {
+    const box = el('div', { class: 'tag-chips' });
+    let custom = !!v[key] && !presets.some(([, d]) => d === v[key]);
+    function render() {
+      const chips = [
+        chip('なし', !v[key] && !custom, () => { v[key] = null; custom = false; render(); }),
+        ...presets.map(([l, d]) => chip(l, !custom && v[key] === d, () => { v[key] = d; custom = false; render(); })),
+        chip(custom && v[key] ? relLabel(v[key]) : '日付…', custom, () => {
+          custom = !custom;
+          if (!custom) v[key] = null;
+          render();
+          if (custom) { const inp = box.querySelector('input'); inp?.focus(); try { inp?.showPicker(); } catch { /* 開けない端末では欄だけ */ } }
+        }),
+      ];
+      if (custom) {
+        const inp = el('input', { type: 'date', class: 'tag-date', 'aria-label': `${label}の日付` });
+        inp.value = v[key] || '';
+        inp.addEventListener('change', () => { v[key] = inp.value || null; render(); });
+        chips.push(inp);
+      }
+      box.replaceChildren(...chips);
+    }
+    render();
+    return el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: label }), box]);
   }
+
+  // プロジェクト：入力欄と同じ「選ぶ欄」（最後に「＋ 新しいプロジェクト」）
+  const NEW = '\u0000new';
+  const projBox = el('div', { class: 'tag-chips' });
+  let newProject = false;
+  function renderProj() {
+    const names = projectNames();
+    const custom = v.project && !names.includes(v.project);
+    const sel = el('select', {
+      class: 'tag-select', 'aria-label': 'プロジェクト',
+      onchange: (e) => {
+        newProject = e.target.value === NEW;
+        v.project = newProject || !e.target.value ? null : e.target.value;
+        renderProj();
+        renderPhase();
+        if (newProject) projBox.querySelector('.tag-newproject')?.focus();
+      },
+    }, [el('option', { value: '', text: 'プロジェクトなし' }), ...names.map((n) => el('option', { value: n, text: n })), el('option', { value: NEW, text: '＋ 新しいプロジェクト' })]);
+    sel.value = newProject || custom ? NEW : (v.project || '');
+    const parts = [sel];
+    if (newProject || custom) {
+      const inp = el('input', {
+        type: 'text', class: 'tag-newproject', placeholder: 'プロジェクト名', 'aria-label': '新しいプロジェクト名',
+        oninput: (e) => { v.project = e.target.value.trim() || null; renderPhase(); },
+      });
+      inp.value = custom ? v.project : '';
+      parts.push(inp);
+    }
+    projBox.replaceChildren(...parts);
+  }
+  const projRow = el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: 'プロジェクト' }), projBox]);
 
   // スプリント：プロジェクトが付いている時だけ（バックログ＋そのプロジェクトのスプリント）。プロジェクトを変えたら外す
   const phaseChips = el('div', { class: 'tag-chips' });
-  const phaseField = field('スプリント', [phaseChips]);
+  const phaseField = el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: 'スプリント' }), phaseChips]);
   let sprintOf = v.project;
   // WBSの親：同じプロジェクトの2段目までのタスク（自分と自分の下は選べない）
   const parentSel = el('select', { class: 'tag-select', 'aria-label': '親', onchange: (e) => { v.parent = e.target.value || null; } });
-  const parentField = field('親（WBS）', [parentSel]);
+  const parentField = el('div', { class: 'tag-row' }, [el('span', { class: 'tag-label', text: '親' }), el('div', { class: 'tag-chips' }, [parentSel])]);
   function renderParent() {
     const list = v.project ? parentChoices(v.project, task.id) : [];
     parentField.style.display = list.length ? '' : 'none';
@@ -282,7 +303,7 @@ export function openEdit(task) {
   function renderPhase() {
     if (v.project !== sprintOf) { v.sprint = null; v.parent = null; sprintOf = v.project; }
     renderParent();
-    phaseField.style.display = v.project ? '' : 'none'; // .edit-field は display 指定があり hidden が効かないため
+    phaseField.style.display = v.project ? '' : 'none';
     if (!v.project) { phaseChips.replaceChildren(); return; }
     const list = getSprints(v.project);
     phaseChips.replaceChildren(
@@ -291,9 +312,8 @@ export function openEdit(task) {
     );
   }
 
-
   const memoBox = el('textarea', {
-    class: 'tag-memo', rows: '4', placeholder: 'タスクの内容', 'aria-label': '内容',
+    class: 'tag-memo', rows: '3', placeholder: '内容', 'aria-label': '内容',
     oninput: (e) => { v.memo = e.target.value; },
   });
   memoBox.value = v.memo || '';
@@ -339,9 +359,7 @@ export function openEdit(task) {
   renderStatus();
   renderProj();
   renderPhase();
-  const t = todayKey();
-  const doCtl = dateControl('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)]]);
-  const [dueIn, dueNone] = dateControl('dueDate', '締切');
+  const today = todayKey();
 
   // 上（見出し・閉じる）／中（項目。ここだけ流れる）／下（保存。いつも見える）
   form.append(
@@ -349,17 +367,17 @@ export function openEdit(task) {
       el('h2', { class: 'edit-heading', text: '編集' }),
       el('div', { class: 'edit-head-btns' }, [expandBtn, closeBtn]),
     ]),
-    el('div', { class: 'edit-body' }, [
-      // 並びはタスクの追加（入力欄）と同じ：名前 → 内容 → 状態（編集だけ）→ 優先度 → 用途 → やる日 → 締切 → 繰り返し → プロジェクト → 親 → スプリント
-      field('タスク名', [titleInput]),
-      field('内容', [memoBox]),
-      field('状態', [statusBox]),
-      field('優先度', [chipControl('priority', PRIORITIES)]),
-      field('用途', [chipControl('area', areaNames())]),
-      field('やる日', [el('div', { class: 'edit-date' }, doCtl)]),
-      field('締切', [el('div', { class: 'edit-date' }, [dueIn, dueNone])]),
-      field('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
-      field('プロジェクト', [projInput, projChips]),
+    el('div', { class: 'edit-body edit-like-add' }, [
+      // 並びはタスクの追加と同じ：名前 → 内容 → 進捗（編集だけ）→ 優先度 → 用途 → やる日 → 締切 → 繰り返し → プロジェクト → 親 → スプリント
+      titleInput,
+      memoBox,
+      statusRow,
+      chipRow('priority', '優先度', PRIORITIES),
+      chipRow('area', '用途', areaNames()),
+      dateRow('doDate', 'やる日', [['今日', today], ['明日', addDays(today, 1)], ['明後日', addDays(today, 2)]]),
+      dateRow('dueDate', '締切', [['今日', today], ['明日', addDays(today, 1)]]),
+      row('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
+      projRow,
       parentField,
       phaseField,
     ]),
