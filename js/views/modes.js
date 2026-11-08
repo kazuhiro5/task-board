@@ -1,11 +1,11 @@
-// 表示の切り替え（リスト／3列／カレンダー／ボード）。プロジェクトの中で使う（一覧は list.js の2つのタブ）。担当：画面役（UI改修）。
+// 表示の切り替え（スプリント／一覧／カレンダー／進捗）。プロジェクトの中で使う。担当：画面役（UI改修）。
 // renderModes(tasks, cfg) → 要素
-//   cfg = { scope: 'list'|'project', groupKey, groupKeys, setGroup, baseCtx, setContext, rerender, hide, compact,
-//           phases, onAddPhase }
-//   プロジェクトの中は groupKey: 'phase'（フェーズ1…N→フェーズなし）。phases＝フェーズの数、
-//   onAddPhase があれば区切りの一番下に「＋ フェーズを追加」を出す。
+//   cfg = { scope: 'list'|'project', groupKey, groupKeys, setGroup, baseCtx, setContext, rerender, hide, compact, project }
+//   プロジェクトの中は groupKey: 'sprint'（スプリント（始まりの早い順）→ バックログ）。
+//   スプリント＝プロジェクトの中の期間（store の getSprints）。タスクを入れていないものはバックログ。
 // 状態（完了を表示・選んだグループ・週のずれ など）は scope ごとにこのファイルが持つ。
-import { updateTask, areaNames, phaseName, renamePhase, deletePhase, lastHistory, undo, group, getTasks } from '../store.js';
+import { updateTask, areaNames, phaseName, renamePhase, deletePhase, lastHistory, undo, group, getTasks,
+  getSprints, addSprint, updateSprint, deleteSprint, sprintState, SPRINT_LENGTHS } from '../store.js';
 import { STATUSES } from '../constants.js';
 import { todayKey, addDays, weekDays, label, fromKey } from '../dates.js';
 import { h, isOpen, compareTasks, taskCard as baseCard, sectionHead, md, areaDot, moreMenu } from './card.js';
@@ -22,8 +22,8 @@ function taskCard(x, o = {}) {
 }
 
 export const MODES = [
+  { value: 'sprint', label: 'スプリント' },
   { value: 'list', label: '一覧' },
-  { value: 'cols', label: 'フェーズ' },
   { value: 'cal', label: 'カレンダー' },
   { value: 'board', label: '進捗' },
 ];
@@ -47,7 +47,8 @@ export function resetScope(scope) {
 export function loadMode(scope) {
   try {
     const v = localStorage.getItem(`tb.mode.${scope}`);
-    return MODES.some((m) => m.value === v) ? v : 'list';
+    if (v === 'cols') return 'sprint'; // フェーズの表示はスプリントに置き換えた
+    return MODES.some((m) => m.value === v) ? v : 'sprint';
   } catch { return 'list'; }
 }
 function saveMode(scope, v) {
@@ -69,7 +70,19 @@ function modeBar(scope, mode, rerender) {
 // フェーズの値：1以上の整数だけ。ほかは「フェーズなし」
 const phaseOf = (x) => (Number.isInteger(x.phase) && x.phase >= 1 ? x.phase : NONE);
 
+const sprintDates = (s) => `${md(s.start)}〜${md(addDays(s.start, s.days - 1))}`;
 function groupsFor(key, list, showDone, cfg = {}) {
+  if (key === 'sprint') {
+    const sps = getSprints(cfg.project);
+    const ids = new Set(sps.map((s) => s.id));
+    return {
+      order: sps.map((s) => s.id),
+      value: (x) => (x.sprint && ids.has(x.sprint) ? x.sprint : NONE),
+      label: (v) => { const s = sps.find((x) => x.id === v); return s ? `${s.name}（${sprintDates(s)}）${sprintState(s) === 'now' ? '・今' : ''}` : v; },
+      noneLabel: 'バックログ',
+      keepEmpty: true,
+    };
+  }
   if (key === 'area') return { order: areaNames(), value: (x) => x.area || NONE, label: (v) => v };
   if (key === 'phase') {
     // 1…N（N＝フェーズの数。もっと大きい番号のタスクがあればそこまで）
@@ -128,6 +141,7 @@ function dropToGroup({ id, fromKey, toKey, finalIds }) {
   const [key, v] = [toKey.slice(0, toKey.indexOf(':')), toKey.slice(toKey.indexOf(':') + 1)];
   const patch = {};
   if (key === 'phase') { const nv = v ? Number(v) : null; if ((task.phase ?? null) !== nv) patch.phase = nv; }
+  if (key === 'sprint' && (task.sprint || null) !== (v || null)) { patch.sprint = v || null; patch.carried = false; }
   if (key === 'status' && (task.status || 'todo') !== v) patch.status = v;
   const writes = planDrop({ id, finalIds, byId, datePatch: patch, sameZone: fromKey === toKey, mode: 'manual' });
   if (!writes.length) return;
@@ -234,7 +248,7 @@ function listMode(tasks, cfg, s) {
   if (pickedV === undefined) s.picked = null;
   cfg.setContext({ ...cfg.baseCtx, ...(pickedV !== undefined ? ctxFor(key, pickedV) : {}) });
 
-  const draggable = cfg.scope === 'project' && key === 'phase';
+  const draggable = cfg.scope === 'project' && (key === 'phase' || key === 'sprint');
   if (draggable) for (const items of buckets.values()) items.sort(byManual);
   const sections = [...buckets.entries()].map(([v, items]) => {
     const isPicked = pickedV === v;
@@ -242,7 +256,7 @@ function listMode(tasks, cfg, s) {
       picked: isPicked,
       onPick: () => { s.picked = isPicked ? null : idOf(key, v); cfg.rerender(); },
     });
-    const menu = phaseMenu(cfg, key, v, renamable(head.querySelector('.tb-sec-title'), cfg, key, v), tasks);
+    const menu = key === 'sprint' ? sprintMenu(cfg, v, tasks) : phaseMenu(cfg, key, v, renamable(head.querySelector('.tb-sec-title'), cfg, key, v), tasks);
     if (menu) head.append(menu);
     return h('section', { class: 'tb-sec', 'data-group-value': v === NONE ? '' : v, ...(draggable ? { 'data-drop': idOf(key, v), 'data-drop-ok': true } : {}) },
       head,
@@ -252,7 +266,100 @@ function listMode(tasks, cfg, s) {
   if (groups && draggable) enableDrag(groups, { rootSel: '.tb-groups.is-rows', onDrop: dropToGroup });
   return [groupBar(cfg, s),
     groups || h('p', { class: 'tb-empty' }, 'タスクはありません'),
-    addPhaseBtn(cfg)];
+    key === 'sprint' ? addSprintBar(cfg) : addPhaseBtn(cfg)];
+}
+
+// ---- スプリント ----
+// スプリントの「…」：名前を変える／期間を変える／削除（中のタスクはバックログへ）
+let editingSprint = null; // 期間を直しているスプリントの id
+function sprintMenu(cfg, v, tasks) {
+  if (v === NONE || !cfg.project) return null;
+  const n = tasks.filter((x) => x.sprint === v).length;
+  return moreMenu('スプリントのメニュー', () => [
+    { label: '名前・期間を変える', onSelect: () => { editingSprint = v; cfg.rerender(); } },
+    {
+      label: 'スプリントを削除', danger: true,
+      confirm: n ? `もう一度押すと削除（${n}件はバックログへ）` : 'もう一度押すと削除',
+      onSelect: () => {
+        deleteSprint(cfg.project, v);
+        const entry = lastHistory();
+        showToast(`スプリントを削除しました${n ? `（${n}件はバックログ）` : ''}`, { action: '元に戻す', onAction: () => undo(entry) });
+        cfg.rerender();
+      },
+    },
+  ], 'tb-phase-more');
+}
+// 名前・始まりの日・長さを直す小さな欄（見出しのすぐ下）
+function sprintEditor(cfg, sp) {
+  const name = h('input', { type: 'text', class: 'tb-rename', value: sp.name, maxlength: '30', 'aria-label': 'スプリントの名前' });
+  const start = h('input', { type: 'date', class: 'tag-date', value: sp.start, 'aria-label': '始まりの日' });
+  const days = h('select', { class: 'tag-select', 'aria-label': '長さ' },
+    SPRINT_LENGTHS.map((x) => h('option', { value: String(x.days) }, x.label)),
+    SPRINT_LENGTHS.some((x) => x.days === sp.days) ? null : h('option', { value: String(sp.days) }, `${sp.days}日`));
+  days.value = String(sp.days);
+  const save = () => {
+    updateSprint(cfg.project, sp.id, { name: name.value, start: start.value, days: Number(days.value) });
+    editingSprint = null;
+    const entry = lastHistory();
+    showToast('スプリントを直しました', { action: '元に戻す', onAction: () => undo(entry) });
+    cfg.rerender();
+  };
+  return h('div', { class: 'tb-sprint-edit' }, name, start, days,
+    h('button', { type: 'button', class: 'primary', onclick: save }, '保存'),
+    h('button', { type: 'button', class: 'tb-btn', onclick: () => { editingSprint = null; cfg.rerender(); } }, 'やめる'));
+}
+// 「＋ スプリントを追加」：前のスプリントの次の日から、選んだ長さで足す
+let newLength = 7;
+function addSprintBar(cfg) {
+  if (!cfg.project) return null;
+  const len = h('select', { class: 'tag-select', 'aria-label': '新しいスプリントの長さ', onchange: (e) => { newLength = Number(e.target.value); } },
+    SPRINT_LENGTHS.map((x) => h('option', { value: String(x.days) }, x.label)));
+  len.value = String(newLength);
+  return h('div', { class: 'tb-sprint-add' },
+    h('button', {
+      type: 'button', class: 'tb-btn tb-addphase',
+      onclick: () => {
+        const sp = addSprint(cfg.project, newLength);
+        const entry = lastHistory();
+        showToast(`${sp.name}（${sprintDates(sp)}）を足しました`, { action: '元に戻す', onAction: () => undo(entry) });
+        cfg.rerender();
+      },
+    }, '＋ スプリントを追加'), len);
+}
+
+// スプリントの表示：左にバックログ、右へスプリントを始まりの早い順に列で並べる。今のスプリントは緑の枠。
+// 列の間を引きずって入れ替える。各列に終わった割合のバー
+function sprintMode(tasks, cfg) {
+  const sps = getSprints(cfg.project);
+  const ids = new Set(sps.map((x) => x.id));
+  cfg.setContext({ ...cfg.baseCtx });
+  const col = (sp) => {
+    const items = tasks.filter((x) => (sp ? x.sprint === sp.id : !(x.sprint && ids.has(x.sprint)))).sort(byManual);
+    const open = items.filter(isOpen);
+    const shown = sp ? items : open; // バックログは未完了だけ（スプリントは終わったものも出して進み具合を見せる）
+    const done = items.length - open.length;
+    const state = sp ? sprintState(sp) : '';
+    const head = sectionHead(sp ? sp.name : 'バックログ', sp ? `${done}/${items.length}` : open.length);
+    if (sp) head.append(sprintMenu(cfg, sp.id, tasks));
+    return h('section', {
+      class: 'tb-bcol tb-spcol' + (state === 'now' ? ' is-now' : '') + (state === 'past' ? ' is-past' : ''),
+      'data-drop': `sprint:${sp ? sp.id : ''}`, 'data-drop-ok': true,
+    },
+    head,
+    h('p', { class: 'tb-sp-dates' }, sp ? `${sprintDates(sp)}${state === 'now' ? '・今' : state === 'past' ? '・終了' : ''}` : '期間を決めていない'),
+    sp && editingSprint === sp.id ? sprintEditor(cfg, sp) : null,
+    sp ? h('div', { class: 'tb-sp-bar' }, h('i', { style: `width:${items.length ? (done / items.length) * 100 : 0}%` })) : null,
+    h('div', { class: 'tb-cards' },
+      shown.map((x) => taskCard(x, { hide: ['sprint'] })),
+      shown.length ? null : h('p', { class: 'tb-empty' }, 'なし')));
+  };
+  const board = h('div', { class: 'tb-spboard' }, col(null), sps.map(col));
+  enableDrag(board, { rootSel: '.tb-spboard', onDrop: dropToGroup });
+  return [
+    h('p', { class: 'tb-empty tb-sp-help' }, 'スプリント＝期間の箱。カードを引きずって箱の間を動かします。期間が終わると、終わっていないものは次のスプリントへ自動で移ります。'),
+    board,
+    addSprintBar(cfg),
+  ];
 }
 
 // ---- 3列：左にグループ、右にそのグループのタスク ----
@@ -425,8 +532,9 @@ export function renderModes(tasks, cfg) {
   const s = st(cfg.scope);
   const mode = loadMode(cfg.scope);
   extraHide = cfg.hide || [];
-  showPhase = cfg.scope === 'project';
-  const body = mode === 'cols' ? colsMode(tasks, cfg, s)
+  showPhase = false; // フェーズの印（F2）はスプリントに置き換えたので出さない
+  const body = mode === 'sprint' ? sprintMode(tasks, cfg)
+    : mode === 'cols' ? colsMode(tasks, cfg, s)
     : mode === 'cal' ? calMode(tasks, cfg, s)
       : mode === 'board' ? boardMode(tasks, cfg)
         : listMode(tasks, cfg, s);

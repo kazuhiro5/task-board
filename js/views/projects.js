@@ -2,8 +2,8 @@
 // renderProjects(container, tasks, opts)：opts = { group, setGroup, setContext, rerender, params, navigate }
 // プロジェクトを大きなカードで並べ、押すとそのプロジェクトのタスク（表示切り替え付き）を出す。
 // opts.params.project があれば、最初からそのプロジェクトの中を開く。
-// 中のリスト・3列はフェーズごとに区切る（フェーズの数は store の getPhases。決定/0007）。
-import { addPhase, getPhases, areaNames, projectNames, addProject } from '../store.js';
+// 中の一覧はスプリントごとに区切る（スプリント（始まりの早い順）→ バックログ。store の getSprints）。
+import { areaNames, projectNames, addProject, currentSprint } from '../store.js';
 import { h, isOpen, md, areaDot, inlineAdder, dueTone } from './card.js';
 import { renderModes, resetScope } from './modes.js';
 
@@ -23,13 +23,11 @@ function summarize(tasks) {
     const open = list.filter(isOpen);
     const next = open.filter((x) => x.dueDate).sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0))[0] || null;
     const areas = areaNames().filter((a) => list.some((x) => x.area === a));
-    // フェーズごとの進み具合（タスクのあるフェーズだけ）：[{ n, done, total }]
-    const phases = [];
-    for (let n = 1; n <= getPhases(name); n++) {
-      const inPhase = list.filter((x) => x.phase === n);
-      if (inPhase.length) phases.push({ n, done: inPhase.filter((x) => !isOpen(x)).length, total: inPhase.length });
-    }
-    return { name, total: list.length, open: open.length, done: list.length - open.length, next, areas, phases };
+    // 今のスプリントの進み具合
+    const cs = currentSprint(name);
+    const inNow = cs ? list.filter((x) => x.sprint === cs.id) : [];
+    const sprintNow = cs ? { name: cs.name, done: inNow.filter((x) => !isOpen(x)).length, total: inNow.length } : null;
+    return { name, total: list.length, open: open.length, done: list.length - open.length, next, areas, sprintNow };
   }).sort((a, b) => {
     // 未完了があるもの → 締切が近い順 → 名前順
     if (!!a.open !== !!b.open) return a.open ? -1 : 1;
@@ -59,9 +57,8 @@ function projectCard(p, opts) {
       h('span', { class: 'tb-pcard-open' }, !p.total ? 'タスク0件' : p.open ? `未完了 ${p.open}件` : 'すべて完了')),
     h('span', { class: 'tb-pcard-next tb-due' + (p.next ? dueTone(p.next.dueDate) : '') },
       p.next ? `次の〆 ${md(p.next.dueDate)}：${p.next.title}` : '締切なし'),
-    // 終わったフェーズだけ「F2 ✓」。途中のフェーズは出さない（情報が多いため）。行は空でも残し、カードの大きさをそろえる
-    h('span', { class: 'tb-pcard-phases' }, p.phases.filter((f) => f.done === f.total)
-      .map((f) => h('span', { class: 'tb-pcard-phase is-done' }, `F${f.n} ✓`))),
+    // 今のスプリントの進み具合（無ければ空の行。カードの大きさをそろえる）
+    h('span', { class: 'tb-pcard-phases' }, p.sprintNow ? h('span', { class: 'tb-pcard-phase is-done' }, `今：${p.sprintNow.name} ${p.sprintNow.done}/${p.sprintNow.total}`) : null),
     h('span', { class: 'tb-progress' },
       h('span', { class: 'tb-bar', role: 'img', 'aria-label': `完了 ${p.done}/${p.total}` },
         h('span', { class: 'tb-bar-fill', style: `width:${pct}%` })),
@@ -107,17 +104,9 @@ export function renderProjects(container, tasks, opts) {
     phaseError,
     renderModes(inside, {
       scope: 'project',
-      groupKey: 'phase',
+      groupKey: 'sprint',
       groupKeys: [],
-      phases: getPhases(name),
-      project: name, // フェーズの名前（store の phaseName）とダブルクリックでの名前変更に使う
-      // 確認は出さない。待たずに描き直す（store が端末内の数をすぐ増やす）。失敗だけ短く出す
-      onAddPhase: () => {
-        addPhase(name).catch((err) => {
-          const box = document.querySelector('.tb-phase-err');
-          if (box) box.textContent = `フェーズを追加できませんでした（${err.message || err}）`;
-        });
-      },
+      project: name, // スプリント（store の getSprints）を引くため
       setGroup: opts.setGroup,
       baseCtx: { project: openName },
       hide: ['project'],

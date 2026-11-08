@@ -10,14 +10,14 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, projectNames, getPhases, areaNames, lastHistory, undo } from './store.js';
+import { updateTask, deleteTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo } from './store.js';
 import { showToast } from './toast.js';
 import { todayKey, addDays } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 
 // size（大中小）はなくした。古いタスクに値が残っていても、ここでは出さず書き換えもしない
-const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'phase', 'priority', 'repeat', 'memo'];
+const FIELDS = ['title', 'status', 'doDate', 'dueDate', 'area', 'project', 'sprint', 'priority', 'repeat', 'memo'];
 const WIDE = '(min-width: 840px)';
 
 let dialog = null;
@@ -265,20 +265,21 @@ export function openEdit(task) {
     })));
   }
 
-  // フェーズ：プロジェクトが付いている時だけ（1…N＋なし）。プロジェクトを外したら phase も null
+  // スプリント：プロジェクトが付いている時だけ（バックログ＋そのプロジェクトのスプリント）。プロジェクトを変えたら外す
   const phaseChips = el('div', { class: 'tag-chips' });
-  const phaseField = field('フェーズ', [phaseChips]);
+  const phaseField = field('スプリント', [phaseChips]);
+  let sprintOf = v.project;
   function renderPhase() {
-    if (!v.project) v.phase = null;
+    if (v.project !== sprintOf) { v.sprint = null; sprintOf = v.project; }
     phaseField.style.display = v.project ? '' : 'none'; // .edit-field は display 指定があり hidden が効かないため
     if (!v.project) { phaseChips.replaceChildren(); return; }
-    const n = Math.max(getPhases(v.project), v.phase || 0);
-    const opts = Array.from({ length: n }, (_, i) => i + 1);
+    const list = getSprints(v.project);
     phaseChips.replaceChildren(
-      ...opts.map((o) => chip(String(o), v.phase === o, () => { v.phase = v.phase === o ? null : o; renderPhase(); })),
-      chip('なし', !v.phase, () => { v.phase = null; renderPhase(); }),
+      chip('バックログ', !v.sprint, () => { v.sprint = null; renderPhase(); }),
+      ...list.map((sp) => chip(`${sp.name}${sprintState(sp) === 'now' ? '（今）' : sprintState(sp) === 'past' ? '（終了）' : ''}`, v.sprint === sp.id, () => { v.sprint = sp.id; renderPhase(); })),
     );
   }
+
 
   const memoBox = el('textarea', {
     class: 'tag-memo', rows: '4', placeholder: 'タスクの内容', 'aria-label': '内容',

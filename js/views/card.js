@@ -201,6 +201,7 @@ export function taskCard(task, opts = {}) {
   const rep = repeatLabel(task.repeat);
   if (rep) meta.push(h('span', { class: 'tb-tag tb-rep', title: `繰り返し：${rep}` }, `↻${rep}`));
   if (task.project && !hide.has('project')) meta.push(h('span', { class: 'tb-tag tb-tag--proj' }, task.project));
+  if (task.carried && !done && task.sprint && !hide.has('carried')) meta.push(h('span', { class: 'tb-tag tb-tag--badge' }, '持ち越し'));
   if (opts.showPhase && task.phase && !hide.has('phase')) {
     meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));
   }
@@ -269,7 +270,7 @@ document.addEventListener('pointerdown', (e) => {
   if (menuOpen && !menuOpen.pop.contains(e.target) && !menuOpen.btn.contains(e.target)) closeMenu();
 }, true);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && menuOpen) { e.stopPropagation(); closeMenu(); } }, true);
-window.addEventListener('scroll', closeMenu, true);
+// 画面を流した時は閉じない（スマホでは、押す前の自動の位置合わせでも流れて、開いた直後に閉じてしまうため）
 
 export function moreMenu(label, getItems, cls = '') {
   const btn = h('button', {

@@ -27,7 +27,7 @@
 // 1件1文書にしている（一覧を1つの文書にまとめると、2台で同時に足した・消した時に片方が消えるため）。
 //
 // ?demo=1 で開くと、ログインせずにメモリ上の見本データで動く（画面の確認用）。
-import { todayKey, addDays } from './dates.js';
+import { todayKey, addDays, weekStart } from './dates.js';
 import { normRepeat, nextDate, daysBetween } from './repeat.js';
 import { AREAS, AREA_KEYS, AREA_HEX, SPARE_COLORS } from './constants.js';
 
@@ -159,6 +159,101 @@ export function getTrash() {
 export function getPhases(project) {
   const n = projects.get(project)?.phases;
   return Number.isInteger(n) && n >= 1 ? n : DEFAULT_PHASES;
+}
+
+// ---- スプリント（プロジェクトの中の期間） ----
+// プロジェクトの文書の sprints に [{ id, name, start: 'YYYY-MM-DD', days }]。タスクは sprint に id を持つ（null＝バックログ）。
+// 期間が終わったスプリントの未完了は、まだ終わっていない次のスプリントへ自動で移す（carryOver。無ければ同じ長さで作る）。
+// 移したタスクには carried: true を付け、「持ち越し」の印を出す（手で動かしたら外す）
+export const SPRINT_LENGTHS = [{ days: 7, label: '1週間' }, { days: 14, label: '2週間' }, { days: 28, label: '4週間' }];
+const sprintEnd = (s) => addDays(s.start, s.days); // 終わりの翌日（この日から次）
+export function getSprints(project) {
+  const list = projects.get(project)?.sprints || [];
+  return list.filter((s) => s && s.id && s.start).slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+}
+export function sprintOf(project, id) { return getSprints(project).find((s) => s.id === id) || null; }
+// 今日を含むスプリント（無ければ null）
+export function currentSprint(project) {
+  const t = todayKey();
+  return getSprints(project).find((s) => s.start <= t && t < sprintEnd(s)) || null;
+}
+export function sprintState(s) {
+  const t = todayKey();
+  return t < s.start ? 'future' : t < sprintEnd(s) ? 'now' : 'past';
+}
+function writeSprints(project, list) {
+  const cur = projects.get(project) || {};
+  projects = new Map(projects).set(project, { ...cur, sprints: list });
+  emit();
+  return backend.setProject(project, { name: project, sprints: list, updatedAt: Date.now() });
+}
+function newSprint(list, days) {
+  const last = list[list.length - 1];
+  const t = todayKey();
+  // 続きは前のスプリントの次の日から。前が無い・もう過ぎている時は今週の月曜から
+  const start = last && sprintEnd(last) > weekStart(t) ? sprintEnd(last) : weekStart(t);
+  const n = list.length + 1;
+  return { id: `sp${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, name: `スプリント${n}`, start, days };
+}
+export function addSprint(project, days = 7) {
+  const before = getSprints(project);
+  const s = newSprint(before, days);
+  record(() => writeSprints(project, before));
+  writeSprints(project, [...before, s]);
+  return s;
+}
+export function updateSprint(project, id, patch) {
+  const before = getSprints(project);
+  record(() => writeSprints(project, before));
+  const clean = {};
+  const name = typeof patch.name === 'string' ? patch.name.trim().slice(0, 30) : '';
+  if (name) clean.name = name; // 空にした時は名前を変えない
+  if (typeof patch.start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(patch.start)) clean.start = patch.start;
+  if (Number.isInteger(patch.days) && patch.days >= 1 && patch.days <= 90) clean.days = patch.days;
+  return writeSprints(project, before.map((s) => (s.id === id ? { ...s, ...clean } : s)));
+}
+// 後ろのスプリントもまとめてずらす（タイムラインで使う）
+export function shiftSprints(project, id, deltaDays, chain = true) {
+  const before = getSprints(project);
+  const i = before.findIndex((s) => s.id === id);
+  if (i < 0 || !deltaDays) return null;
+  record(() => writeSprints(project, before));
+  return writeSprints(project, before.map((s, j) => (j === i || (chain && j > i) ? { ...s, start: addDays(s.start, deltaDays) } : s)));
+}
+// スプリントを消す：中のタスクはバックログへ（タスクは消さない）
+export function deleteSprint(project, id) {
+  const before = getSprints(project);
+  const inside = allTasks.filter((x) => x.project === project && x.sprint === id);
+  return group('deleteSprint', () => {
+    record(() => writeSprints(project, before));
+    updateMany(inside.map((x) => ({ id: x.id, patch: { sprint: null, carried: false } })));
+    writeSprints(project, before.filter((s) => s.id !== id));
+    return inside.length;
+  });
+}
+// 期間が終わったスプリントの未完了を、次のスプリントへ移す。移した件数と、元に戻すための履歴を返す
+export function carryOver() {
+  const moves = [];
+  let made = 0;
+  group('carry', () => {
+    for (const name of projectNames()) {
+      let list = getSprints(name);
+      if (!list.length) continue;
+      const ended = list.filter((s) => sprintState(s) === 'past');
+      const left = allTasks.filter((x) => !x.deletedAt && x.project === name && x.status !== 'done' && ended.some((s) => s.id === x.sprint));
+      if (!left.length) continue;
+      let target = list.find((s) => sprintState(s) !== 'past');
+      if (!target) {
+        target = newSprint(list, list[list.length - 1].days || 7);
+        record(() => writeSprints(name, list));
+        writeSprints(name, [...list, target]);
+        made++;
+      }
+      updateMany(left.map((x) => ({ id: x.id, patch: { sprint: target.id, carried: true } })));
+      moves.push({ project: name, count: left.length, to: target.name });
+    }
+  });
+  return { moves, made, entry: moves.length ? lastHistory() : null };
 }
 
 // フェーズの名前（名前を付けていなければ「フェーズN」）
@@ -429,6 +524,7 @@ function normalize(data) {
     area: data.area || null,
     project,
     phase: project ? toPhase(data.phase) : null,
+    sprint: project && data.sprint ? String(data.sprint) : null,
     priority: data.priority || null,
     memo: data.memo || '',
     repeat: normRepeat(data.repeat),
@@ -458,6 +554,11 @@ export async function updateTask(id, patch) {
   if ('phase' in patch) p.phase = toPhase(patch.phase);
   if ('order' in patch && !(typeof patch.order === 'number' && Number.isFinite(patch.order))) delete p.order;
   if ('project' in patch && !p.project) p.phase = null; // プロジェクトを外したらフェーズも外す
+  // プロジェクトが変わったらスプリントも外す（スプリントはプロジェクトごと）
+  if ('project' in patch && !('sprint' in patch)) {
+    const was = allTasks.find((x) => x.id === id);
+    if (!was || (was.project || null) !== p.project) p.sprint = null;
+  }
   if ('repeat' in patch) p.repeat = normRepeat(patch.repeat);
 
   // 繰り返し：完了にした時に次の回を作る／完了を戻した時に未着手の次の回をゴミ箱へ
@@ -694,7 +795,7 @@ async function firestoreBackend(uid) {
       const x = d.data();
       let name = x.name;
       if (!name) { try { name = decodeURIComponent(d.id); } catch { name = d.id; } }
-      m.set(name, { phases: x.phases, phaseNames: x.phaseNames || null, updatedAt: x.updatedAt || 0 });
+      m.set(name, { phases: x.phases, phaseNames: x.phaseNames || null, sprints: Array.isArray(x.sprints) ? x.sprints : [], updatedAt: x.updatedAt || 0 });
     }
     projects = m;
     emit();

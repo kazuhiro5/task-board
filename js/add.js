@@ -4,14 +4,14 @@
 // タグは行ごとに1つだけ選べる（もう一度押すと解除）。何も選ばなければ受信箱に入る（store側）。
 // 初期値は getContext() から作る。手で触っていない行は、フォーカスした時・追加する瞬間に読み直す
 // （画面の見出しを押してから追加しても、その見出しの分類で入るように）。手で触った行はその選択を優先する。
-// フェーズの行は、プロジェクトを選んでいる時だけ出す。初期値は getContext().phase。
+// スプリントの行は、プロジェクトを選んでいる時だけ出す（終わっていないスプリントとバックログ）。初期値は getContext().sprint。
 // 追加は待たない（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。失敗だけ画面に出す。
-import { addTask, projectNames, getPhases, areaNames, subscribe } from './store.js';
+import { addTask, projectNames, getSprints, sprintState, areaNames, subscribe } from './store.js';
 import { PRIORITIES, STATUSES } from './constants.js';
 import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor } from './repeat.js';
 
-const KEYS = ['doDate', 'dueDate', 'area', 'project', 'phase', 'priority'];
+const KEYS = ['doDate', 'dueDate', 'area', 'project', 'sprint', 'priority'];
 const NEW = '\u0000new'; // プロジェクトの選択肢の「＋ 新しいプロジェクト」（ふつうの名前とぶつからない値）
 
 function el(tag, props = {}, children = []) {
@@ -167,11 +167,15 @@ export function mountAdd(container, getContext) {
   }
 
   // フェーズ（1…N）。N はそのプロジェクトのフェーズの数
-  function phaseRow(project) {
-    const n = Math.max(getPhases(project), sel.phase || 0);
-    const opts = Array.from({ length: n }, (_, i) => i + 1);
-    return row('フェーズ', opts.map((v) => chip(String(v), sel.phase === v, () => pick('phase', v))));
+  function sprintRow(project) {
+    const list = getSprints(project).filter((sp) => sprintState(sp) !== 'past');
+    if (sel.sprint && !list.some((sp) => sp.id === sel.sprint)) sel.sprint = null;
+    return row('スプリント', [
+      chip('バックログ', !sel.sprint, () => { sel.sprint = null; touched.add('sprint'); renderTags(); }),
+      ...list.map((sp) => chip(`${sp.name}${sprintState(sp) === 'now' ? '（今）' : ''}`, sel.sprint === sp.id, () => pick('sprint', sp.id))),
+    ]);
   }
+
 
   // プロジェクトは数が増えるので、ボタンを並べず「選ぶ」欄にする（最後に「＋ 新しいプロジェクト」）
   function projectRow() {
@@ -183,9 +187,9 @@ export function mountAdd(container, getContext) {
         const v = e.target.value;
         newProject = v === NEW;
         sel.project = newProject || !v ? null : v;
-        sel.phase = null; // フェーズはプロジェクトごとに違うので選び直す
+        sel.sprint = null; // スプリントはプロジェクトごとに違うので選び直す
         touched.add('project');
-        touched.add('phase');
+        touched.add('sprint');
         renderTags();
         if (newProject) tags.querySelector('.tag-newproject')?.focus();
       },
@@ -220,7 +224,7 @@ export function mountAdd(container, getContext) {
       ]),
       projectRow(),
     );
-    if (sel.project && projectNames().includes(sel.project)) tags.append(phaseRow(sel.project));
+    if (sel.project && projectNames().includes(sel.project)) tags.append(sprintRow(sel.project));
     prioBox.replaceChildren(simpleRow('priority', '優先度', PRIORITIES));
     for (const c of form.querySelectorAll('.tag-chips')) if (!c.dataset.wheel) { c.dataset.wheel = '1'; wheelSideways(c); }
   }
@@ -273,7 +277,7 @@ export function mountAdd(container, getContext) {
     const data = { title: name };
     for (const k of KEYS) if (sel[k]) data[k] = sel[k];
     // フェーズはプロジェクトの中で、プロジェクトが付いている時だけ
-    if (!data.project) delete data.phase;
+    if (!data.project) delete data.sprint;
     if (memo.trim()) data.memo = memo.trim();
     if (repeat) data.repeat = repeat;
     if (STATUSES.some((st) => st.value === ctx.status)) data.status = ctx.status;

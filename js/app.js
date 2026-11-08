@@ -418,6 +418,23 @@ function showApp(signedIn) {
   $('#appRoot').hidden = !signedIn;
 }
 
+// 期間が終わったスプリントの未完了を、次のスプリントへ移す（開いた時と、日付が変わってから戻ってきた時）。
+// 読み込んだ直後はプロジェクトの文書がまだ届いていないことがあるので、少し待ってから
+let carriedOn = '';
+function scheduleCarry() {
+  setTimeout(() => {
+    const day = new Date().toDateString();
+    if (carriedOn === day || $('#appRoot').hidden) return;
+    carriedOn = day;
+    const r = store.carryOver();
+    if (!r.moves.length) return;
+    const n = r.moves.reduce((a, m) => a + m.count, 0);
+    const where = r.moves.map((m) => `${m.project}：${m.to}`).join('、');
+    showToast(`期間が終わったスプリントの${n}件を持ち越しました（${where}）`, { action: '元に戻す', onAction: () => store.undo(r.entry), ms: 10000 });
+  }, 2500);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') scheduleCarry(); });
+
 async function boot() {
   renderThemeOpts();
   addBox = mountAdd($('#add'), () => state.ctx);
@@ -430,6 +447,7 @@ async function boot() {
     $('#userBox').textContent = '見本データ（demo）';
     await store.start('demo');
     render();
+    scheduleCarry();
     return;
   }
 
@@ -447,6 +465,7 @@ async function boot() {
       $('#userBox').textContent = user.email || '';
       await store.start(user.uid);
       render();
+      scheduleCarry();
     } else {
       store.stop();
       showApp(false);
