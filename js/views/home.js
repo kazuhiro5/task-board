@@ -20,7 +20,11 @@ let openProject = null;
 let miniMonth = null; // 'YYYY-MM'（ミニカレンダーで見ている月）
 
 const daysBetween = (a, b) => Math.round((fromKey(b) - fromKey(a)) / DAY);
+// 今年でない日は年も付ける（1年のプロジェクトで「11/9〜11/7」と逆に見えないように）
+const mdy = (k) => (k.slice(0, 4) === todayKey().slice(0, 4) ? md(k) : `${k.slice(0, 4)}/${md(k)}`);
 const spEnd = (sp) => addDays(sp.start, sp.days);
+// 最後のスプリントの終わりの日（並びに頼らず一番遅い日を取る）
+const lastEnd = (sps) => addDays(sps.map(spEnd).sort().pop(), -1);
 
 // ---- 今日のタスク（ブロック） ----
 function tile(x, rerender) {
@@ -56,8 +60,11 @@ function projectCards(names, cur, rawTasks, rerender) {
       ? (!sp ? 'スプリントなし'
         : sprintState(sp) === 'now' ? `${sp.name.replace(/（.*）/, '')}・あと${daysBetween(todayKey(), spEnd(sp))}日・${done}/${inside.length}`
           : `次：${sp.name.replace(/（.*）/, '')}・${md(sp.start)}から`)
-      : (sps.length ? `${md(sps[0].start)}〜${md(addDays(spEnd(sps[sps.length - 1]), -1))}・作業 ${allDone}/${all.length}` : `作業 ${allDone}/${all.length}`);
+      : (sps.length ? `${mdy(sps[0].start)}〜${mdy(lastEnd(sps))}・作業 ${allDone}/${all.length}` : `作業 ${allDone}/${all.length}`);
     const rate = pmode === 'sprint' ? (inside.length ? done / inside.length : 0) : (all.length ? allDone / all.length : 0);
+    // 締切：最後のスプリントの終わりの日。スプリントが無ければ、未完了の作業の締切のうち一番遅い日
+    const dues = all.filter(isOpen).map((x) => x.dueDate).filter(Boolean).sort();
+    const end = sps.length ? lastEnd(sps) : dues[dues.length - 1] || null;
     return h('button', {
       type: 'button', class: 'hm-pchip' + (cur === name ? ' is-on' : ''),
       onclick: () => {
@@ -66,7 +73,9 @@ function projectCards(names, cur, rawTasks, rerender) {
         // 1列になる幅ではカードが中身より下にあるので、選んだ中身まで送る
         if (window.matchMedia('(max-width: 1100px)').matches) document.querySelector('.hm-detail')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       },
-    }, h('b', {}, name), h('small', {}, sub), h('span', { class: 'hm-bar' }, h('i', { style: `width:${rate * 100}%` })));
+    }, h('b', {}, name), h('small', {}, sub),
+    h('span', { class: 'hm-pdue' + (end ? dueTone(end) : ''), title: sps.length ? '最後のスプリントの終わり' : '作業の締切のうち一番遅い日' }, end ? `〆${mdy(end)}` : '〆なし'),
+    h('span', { class: 'hm-bar' }, h('i', { style: `width:${rate * 100}%` })));
   }));
 }
 function sprintDetail(name, rawTasks, navigate) {

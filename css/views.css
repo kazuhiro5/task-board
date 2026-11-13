@@ -774,7 +774,9 @@
 .hm-spcol li span:last-child { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .hm-spcol li.is-done span:last-child { text-decoration: line-through; color: var(--muted); }
 /* タイムライン一覧（選んだプロジェクトの大項目とスプリント） */
-.hm-tl { position: relative; overflow-x: auto; }
+/* 縦は10行ぶんで止め、それより多ければ中で縦に流す（見出しの日付の行は上に残す） */
+.hm-tl { position: relative; overflow: auto; max-height: calc(24px + 35px * 10); overscroll-behavior: contain; }
+.hm-tl-row.is-head { position: sticky; top: 0; z-index: 3; background: var(--surface); }
 .hm-tl-row { display: flex; align-items: center; min-height: 34px; border-top: 1px solid var(--line); }
 .hm-tl-row.is-head { border-top: 0; min-height: 24px; font-size: 11px; color: var(--muted); }
 .hm-tl-label { position: sticky; left: 0; z-index: 2; flex: none; width: 130px; padding-right: 8px; font-size: 13px; font-weight: 600; background: var(--surface); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; }
@@ -814,10 +816,19 @@
 @media (max-width: 599.98px) { .hm-tiles { gap: 8px; } .hm-tile { min-height: 96px; padding: 10px; } .hm-pchip { min-width: 0; flex: 1 1 calc(50% - 8px); } }
 
 .hm-tl-none { position: absolute; left: 8px; top: 9px; font-size: 11px; color: var(--muted); z-index: 2; }
-.hm-side .hm-projs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
-.hm-side .hm-pchip { min-width: 0; padding: 8px 10px; }
-.hm-side .hm-pchip b { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.hm-side .hm-pchip small { font-size: 11px; }
+/* 右の列のプロジェクト：1列・1段（名前 → 今のスプリント → 締切 を1行に。下に細い進み具合の線） */
+.hm-side .hm-projs { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; margin: 0; }
+.hm-side .hm-pchip {
+  min-width: 0; padding: 7px 10px 0; gap: 0 8px; overflow: hidden;
+  grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline;
+}
+.hm-side .hm-pchip b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 12em; }
+.hm-side .hm-pchip small { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-pdue { font-size: 12px; font-weight: 700; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hm-pdue.is-over { color: var(--danger); }
+.hm-pdue.is-month { color: var(--due-month); }
+.hm-pdue.is-later { color: var(--due-later, var(--muted)); }
+.hm-side .hm-pchip .hm-bar { grid-column: 1 / -1; height: 3px; margin: 7px -10px 0; border-radius: 0; }
 
 /* ---- リンク集：用途の中のグループ ---- */
 .tb-link-group { margin-top: 10px; }
