@@ -123,14 +123,13 @@ export function mountAdd(container, getContext) {
       customDate[key] = false;
       pick(key, v);
     }));
-    if (withNone) {
-      chips.unshift(chip('なし', !sel[key] && !customDate[key], () => {
+    // 並びは 今日→明日→明後日→日付…→なし（日付を選ぶことの方が多いので、なしは最後）
+    const noneChip = !withNone ? null : (chip('なし', !sel[key] && !customDate[key], () => {
         customDate[key] = false;
         sel[key] = null;
         touched.add(key);
         renderTags();
       }));
-    }
     const customLabel = isCustom && sel[key] ? relLabel(sel[key]) : '日付…';
     chips.push(chip(customLabel, isCustom, () => {
       if (isCustom) {
@@ -149,6 +148,7 @@ export function mountAdd(container, getContext) {
         }
       }
     }));
+    if (noneChip) chips.push(noneChip);
     let extra = null;
     if (isCustom) {
       extra = el('input', {
@@ -231,7 +231,7 @@ export function mountAdd(container, getContext) {
     tags.replaceChildren(
       simpleRow('area', '用途', areaNames()),
       dateRow('doDate', 'やる日', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]], true),
-      dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)]], true),
+      dateRow('dueDate', '締切', [['今日', t], ['明日', addDays(t, 1)], ['明後日', addDays(t, 2)]], true),
       el('div', { class: 'tag-row' }, [
         el('span', { class: 'tag-label', text: '繰り返し' }),
         repeatEditor({ value: repeat, base: () => sel.doDate, onChange: (r) => { repeat = r; } }),

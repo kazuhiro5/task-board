@@ -239,8 +239,8 @@ export function openEdit(task) {
     const box = el('div', { class: 'tag-chips' });
     let custom = !!v[key] && !presets.some(([, d]) => d === v[key]);
     function render() {
+      // 並びは 今日→明日→明後日→日付…（選んだ時はその横に日付の欄）→なし
       const chips = [
-        chip('なし', !v[key] && !custom, () => { v[key] = null; custom = false; render(); }),
         ...presets.map(([l, d]) => chip(l, !custom && v[key] === d, () => { v[key] = d; custom = false; render(); })),
         chip(custom && v[key] ? relLabel(v[key]) : '日付…', custom, () => {
           custom = !custom;
@@ -255,6 +255,7 @@ export function openEdit(task) {
         inp.addEventListener('change', () => { v[key] = inp.value || null; render(); });
         chips.push(inp);
       }
+      chips.push(chip('なし', !v[key] && !custom, () => { v[key] = null; custom = false; render(); }));
       box.replaceChildren(...chips);
     }
     render();
@@ -381,7 +382,7 @@ export function openEdit(task) {
       chipRow('priority', '優先度', PRIORITIES),
       chipRow('area', '用途', areaNames()),
       dateRow('doDate', 'やる日', [['今日', today], ['明日', addDays(today, 1)], ['明後日', addDays(today, 2)]]),
-      dateRow('dueDate', '締切', [['今日', today], ['明日', addDays(today, 1)]]),
+      dateRow('dueDate', '締切', [['今日', today], ['明日', addDays(today, 1)], ['明後日', addDays(today, 2)]]),
       row('繰り返し', [repeatEditor({ value: v.repeat, base: () => v.doDate, onChange: (r) => { v.repeat = r; } })]),
       projRow,
       parentField,

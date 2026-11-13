@@ -8,7 +8,7 @@
 // 各区分の中は、引きずって決めた順（手動）だけ。並び替えの欄は置かない（引きずれば並べ替えられるため）。
 // 期限切れは「期限切れ N件 ▸」の1行だけ。押すと中身が伸びる（開いたかは tb.overdueOpen）。
 // 持ち越し（やる日が昨日以前で、締切は過ぎていない）も同じ形の1行（tb.carryOpen）。今日の区分に混ぜると今日やることが埋もれるため。
-//   中の上に一括ボタン「全部今日へ／全部明日へ／日付なしへ」（やる日と締切の両方を書き換える）。2回押し。
+//   見出しの横に一括ボタン（今日／明日／なし）。期限切れは締切、持ち越しはやる日を書き換える。2回押し。
 //   書いた直後に「◯件を動かしました・元に戻す」（元のやる日・締切に戻す）。
 import { todayKey, toKey, addDays, label } from '../dates.js';
 import { h, isOpen, taskCard, sectionHead } from './card.js';
@@ -23,7 +23,7 @@ const AHEAD = 14; // 最初に出すのは何日先まで（それより先は�
 let filter = null; // 絞り込み：{ by: 'area'|'project', name } か null
 let doneOpen = false; // 「今日終えたもの」を開いているか
 let showFar = false; // 15日先以降も出しているか
-let armed = null; // 一括ボタンを1回押した：'today' | 'tomorrow' | 'none'
+let armed = null; // 一括ボタンを1回押した所：'overdue:today' のように 区分:行き先
 let armTimer = 0;
 
 function loadFlag(k) {
@@ -33,21 +33,24 @@ function saveFlag(k, v) {
   try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* 保存できなくても動く */ }
 }
 
-// 持ち越し：畳んだ1行＋中身（期限切れと同じ見た目。一括ボタンは無し。今日・明日へ引きずって動かせる）
-function carryBox(list, opts) {
+// 持ち越し：畳んだ1行＋中身（期限切れと同じ見た目。今日・明日へ引きずって動かせる）。
+// 見出しの横に、やる日をまとめて動かすボタン（締切は変えない。持ち越しは締切を過ぎていないため）
+function carryBox(list, t, opts) {
   if (!list.length) return null;
   const open = loadFlag('tb.carryOpen');
-  const head = h('h2', { class: 'tb-od-head' },
-    h('button', {
-      type: 'button', class: 'tb-od-btn tb-carry-btn', 'aria-expanded': String(open), 'aria-controls': 'tb-carry-body',
-      onclick: () => { saveFlag('tb.carryOpen', !open); opts.rerender(); },
-    },
-    h('span', { class: 'tb-od-title' }, '持ち越し'),
-    h('span', { class: 'tb-od-n' }, `${list.length}件`),
-    h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸')));
-  if (!open) return h('section', { class: 'tb-sec tb-od tb-carry', 'data-sec': 'carry' }, head);
+  const head = h('div', { class: 'tb-od-line' },
+    h('h2', { class: 'tb-od-head' },
+      h('button', {
+        type: 'button', class: 'tb-od-btn tb-carry-btn', 'aria-expanded': String(open), 'aria-controls': 'tb-carry-body',
+        onclick: () => { saveFlag('tb.carryOpen', !open); opts.rerender(); },
+      },
+      h('span', { class: 'tb-od-title' }, '持ち越し'),
+      h('span', { class: 'tb-od-n' }, `${list.length}件`),
+      h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'))),
+    bulkButtons('carry', list, t, opts));
+  if (!open) return h('section', { class: 'tb-sec tb-od tb-carry', 'data-sec': 'carry' }, head, bulkHint('carry', list));
   return h('section', { class: 'tb-sec tb-od tb-carry is-open', 'data-sec': 'carry', 'data-drop': 'carry', 'data-drop-ok': false },
-    head,
+    head, bulkHint('carry', list),
     h('div', { class: 'tb-od-body', id: 'tb-carry-body' },
       h('div', { class: 'tb-cards' }, list.map((x) => taskCard(x, { badges: ['持ち越し'] })))));
 }
@@ -80,67 +83,83 @@ function saveOverdueOpen(v) {
   try { localStorage.setItem('tb.overdueOpen', v ? '1' : '0'); } catch { /* 保存できなくても動く */ }
 }
 
+// まとめて動かすボタン（期限切れ・持ち越しの見出しの横）。2回押しで動かす（1回目は押した所が色付きになる）。
+//   期限切れ：締切を書き換える（やる日はそのまま。やる日が過ぎていれば、締切が直った後は持ち越しに出る）
+//   持ち越し：やる日を書き換える（締切はそのまま）
 const BULK = [
-  { key: 'today', label: '全部今日へ', done: '今日へ' },
-  { key: 'tomorrow', label: '全部明日へ', done: '明日へ' },
-  { key: 'none', label: '日付なしへ', done: '日付なしへ' },
+  { key: 'today', label: '今日', done: '今日へ' },
+  { key: 'tomorrow', label: '明日', done: '明日へ' },
+  { key: 'none', label: 'なし', done: '日付なしへ' },
 ];
+const FIELD = { overdue: { field: 'dueDate', name: '締切' }, carry: { field: 'doDate', name: 'やる日' } };
 
-// 期限切れをまとめて動かす。元の日付を覚えておき、「元に戻す」で戻す
-function moveAll(list, key, t) {
+// 元の日付を覚えておき、「元に戻す」で戻す
+function moveAll(kind, list, key, t) {
   const day = key === 'today' ? t : key === 'tomorrow' ? addDays(t, 1) : null;
+  const { field, name } = FIELD[kind];
   const fail = (e) => { console.warn('[task-board] 一括の書き換えに失敗', e); showToast(`動かせませんでした（${e.message || e}）`); };
-  updateMany(list.map((x) => ({ id: x.id, patch: { doDate: day, dueDate: day } }))).catch(fail);
+  updateMany(list.map((x) => ({ id: x.id, patch: { [field]: day } }))).catch(fail);
   const entry = lastHistory();
   const label = BULK.find((b) => b.key === key).done;
-  showToast(`${list.length}件を${label}動かしました`, { action: '元に戻す', onAction: () => undo(entry) });
+  showToast(`${list.length}件の${name}を${label}`, { action: '元に戻す', onAction: () => undo(entry) });
 }
 
-// 期限切れ：畳んだ1行＋中身
+function bulkButtons(kind, list, t, opts) {
+  const { name } = FIELD[kind];
+  return h('div', { class: 'tb-od-bulk', role: 'group', 'aria-label': `${name}をまとめて動かす` },
+    h('span', { class: 'tb-od-bulk-label' }, `${name}→`),
+    BULK.map((b) => {
+      const id = `${kind}:${b.key}`;
+      return h('button', {
+        type: 'button',
+        class: 'tb-btn tb-od-move' + (armed === id ? ' is-armed' : ''),
+        'data-bulk': id, title: `${list.length}件の${name}を${b.done}`,
+        onclick: () => {
+          clearTimeout(armTimer);
+          if (armed !== id) {
+            armed = id;
+            armTimer = setTimeout(() => { armed = null; opts.rerender(); }, 5000);
+            opts.rerender();
+            return;
+          }
+          armed = null;
+          moveAll(kind, list, b.key, t);
+        },
+      }, b.label);
+    }));
+}
+function bulkHint(kind, list) {
+  if (!armed || !armed.startsWith(`${kind}:`)) return null;
+  const b = BULK.find((x) => `${kind}:${x.key}` === armed);
+  return h('p', { class: 'tb-od-hint', role: 'status' }, `もう一度押すと${list.length}件の${FIELD[kind].name}を${b.done}動かします`);
+}
+
+// 期限切れ：畳んだ1行＋中身。見出しの横に、締切をまとめて動かすボタン
 function overdueBox(list, t, opts) {
   if (!list.length) return null;
   const open = loadOverdueOpen();
-  const head = h('h2', { class: 'tb-od-head' },
-    h('button', {
-      type: 'button',
-      class: 'tb-od-btn',
-      'aria-expanded': String(open),
-      'aria-controls': 'tb-od-body',
-      onclick: () => { saveOverdueOpen(!open); armed = null; opts.rerender(); },
-    },
-    h('span', { class: 'tb-od-title' }, '期限切れ'),
-    h('span', { class: 'tb-od-n' }, `${list.length}件`),
-    h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸')));
-  if (!open) return h('section', { class: 'tb-sec tb-od', 'data-sec': 'overdue' }, head);
-
-  const bulk = h('div', { class: 'tb-od-bulk', role: 'group', 'aria-label': '期限切れをまとめて動かす' },
-    BULK.map((b) => h('button', {
-      type: 'button',
-      class: 'tb-btn tb-od-move' + (armed === b.key ? ' is-armed' : ''),
-      'data-bulk': b.key,
-      onclick: () => {
-        clearTimeout(armTimer);
-        if (armed !== b.key) {
-          armed = b.key;
-          armTimer = setTimeout(() => { armed = null; opts.rerender(); }, 5000);
-          opts.rerender();
-          return;
-        }
-        armed = null;
-        moveAll(list, b.key, t);
+  const head = h('div', { class: 'tb-od-line' },
+    h('h2', { class: 'tb-od-head' },
+      h('button', {
+        type: 'button',
+        class: 'tb-od-btn',
+        'aria-expanded': String(open),
+        'aria-controls': 'tb-od-body',
+        onclick: () => { saveOverdueOpen(!open); opts.rerender(); },
       },
-    }, b.label)));
-  const hint = armed
-    ? h('p', { class: 'tb-od-hint', role: 'status' }, `もう一度押すと${list.length}件を動かします`)
-    : null;
+      h('span', { class: 'tb-od-title' }, '期限切れ'),
+      h('span', { class: 'tb-od-n' }, `${list.length}件`),
+      h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'))),
+    bulkButtons('overdue', list, t, opts));
+  if (!open) return h('section', { class: 'tb-sec tb-od', 'data-sec': 'overdue' }, head, bulkHint('overdue', list));
   const cards = list.map((x) => {
     const c = taskCard(x);
     c.dataset.drag = 'no';
     return c;
   });
   return h('section', { class: 'tb-sec tb-od is-open', 'data-sec': 'overdue', 'data-drop': 'overdue', 'data-drop-ok': false },
-    head,
-    h('div', { class: 'tb-od-body', id: 'tb-od-body' }, bulk, hint, h('div', { class: 'tb-cards' }, cards)));
+    head, bulkHint('overdue', list),
+    h('div', { class: 'tb-od-body', id: 'tb-od-body' }, h('div', { class: 'tb-cards' }, cards)));
 }
 
 // drop：落とせる区分の名前（'today' 'tomorrow' 日付）。noDrop：落とせない区分の名前。fixed：行を引きずれない
@@ -247,7 +266,7 @@ export function renderToday(container, rawTasks, opts) {
     chips,
     filterBar,
     overdue.length || carry.length || yesterday.length
-      ? h('div', { class: 'tb-od-wrap' }, overdueBox(overdue, t, opts), carryBox(carry, opts), yesterdayBox(yesterday, opts)) : null,
+      ? h('div', { class: 'tb-od-wrap' }, overdueBox(overdue, t, opts), carryBox(carry, t, opts), yesterdayBox(yesterday, opts)) : null,
     section(`今日　${label(t)}`, today, (x) => ({ badges: x.doDate && x.doDate < t ? ['持ち越し'] : [], hide: x.doDate && x.doDate >= t ? ['doDate'] : [] }), { 'data-sec': 'today', class: 'tb-sec tb-sec--today' }, { drop: 'today' }),
     section('明日', tmr, dayCard, { 'data-sec': 'tomorrow' }, { drop: 'tomorrow' }),
     ahead,
