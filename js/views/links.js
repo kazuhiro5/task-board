@@ -1,6 +1,6 @@
 // 画面「リンク集」。担当：画面役。
 // renderLinks(container, tasks, opts)：よく使うサイトを用途ごとに並べる。押すと新しいタブで開く。
-//   リンクがある用途だけ出す。用途なしは一番下。
+//   リンクがある用途だけ出す。用途なしは一番下。用途の中は「グループ」でさらに分ける（グループなし → 各グループの小見出し）。
 //   「編集」で名前・URL・用途を直す・消す（消すは2回押し。ゴミ箱には入れない）。
 // mountLinkAdd(container)：リンク集の時だけ、タスクの入力欄の代わりに出す「リンクを追加」の入力欄。
 //   見た目と開き方はタスクの入力欄（add.js）と同じ（1行目＝名前＋追加。押すと URL・用途の行が開く）。
@@ -35,9 +35,40 @@ function areaChips(cur, onPick) {
 }
 const tagRow = (name, ...kids) => h('div', { class: 'tag-row' }, h('span', { class: 'tag-label' }, name), ...kids);
 
+// その用途にあるグループの名前。並びは名前の順（リンクの並びから決めると、引きずるたびにグループの順まで入れ替わるため）
+function groupsOf(area) {
+  return [...new Set(getLinks().filter((x) => (x.area || null) === (area || null) && x.group).map((x) => x.group))]
+    .sort((a, b) => a.localeCompare(b, 'ja'));
+}
+// グループのチップ（もう一度押すと外す）＋「＋ 新しいグループ」（押すと名前の欄）。st は { area, group, newGroup }
+function groupRow(st, rerender) {
+  const list = groupsOf(st.area);
+  if (st.group && !list.includes(st.group) && !st.newGroup) list.push(st.group);
+  const chips = list.map((g) => h('button', {
+    type: 'button', class: 'chip' + (st.group === g && !st.newGroup ? ' is-on' : ''), 'aria-pressed': String(st.group === g && !st.newGroup),
+    onclick: () => { st.newGroup = false; st.group = st.group === g ? null : g; rerender(); },
+  }, g));
+  chips.push(h('button', {
+    type: 'button', class: 'chip' + (st.newGroup ? ' is-on' : ''), 'aria-pressed': String(!!st.newGroup),
+    onclick: () => {
+      st.newGroup = !st.newGroup;
+      st.group = null;
+      rerender();
+      if (st.newGroup) requestAnimationFrame(() => document.querySelector('input[data-newgroup]')?.focus());
+    },
+  }, '＋ 新しいグループ'));
+  if (st.newGroup) {
+    const inp = h('input', { type: 'text', class: 'tag-newproject', placeholder: 'グループの名前', 'aria-label': '新しいグループの名前', maxlength: '20', 'data-newgroup': '1' });
+    inp.value = st.group || '';
+    inp.addEventListener('input', () => { st.group = inp.value.trim() || null; });
+    chips.push(inp);
+  }
+  return tagRow('グループ', h('div', { class: 'tag-chips' }, chips));
+}
+
 // ---- 上（スマホは下）の「リンクを追加」 ----
 export function mountLinkAdd(container) {
-  const st = { url: '', area: null };
+  const st = { url: '', area: null, group: null, newGroup: false };
   const name = h('input', {
     type: 'text', class: 'add-title', placeholder: 'リンクを追加（名前）', 'aria-label': '名前', maxlength: '40', enterkeyhint: 'next',
   });
@@ -59,7 +90,8 @@ export function mountLinkAdd(container) {
     url.addEventListener('input', () => { st.url = url.value; error.textContent = ''; });
     tags.replaceChildren(
       tagRow('URL', h('div', { class: 'tag-chips' }, url)),
-      tagRow('用途', areaChips(st.area, (a) => { st.area = a; renderTags(); })));
+      tagRow('用途', areaChips(st.area, (a) => { st.area = a; st.group = null; st.newGroup = false; renderTags(); })),
+      groupRow(st, renderTags));
   }
   const setOpen = (v) => container.classList.toggle('is-open', v);
   name.addEventListener('focus', () => setOpen(true));
@@ -79,7 +111,7 @@ export function mountLinkAdd(container) {
     e.preventDefault();
     let p;
     try {
-      p = addLink({ url: st.url, name: name.value, area: st.area });
+      p = addLink({ url: st.url, name: name.value, area: st.area, group: st.group });
     } catch (err) {
       error.textContent = err.message || String(err);
       setOpen(true);
@@ -91,6 +123,8 @@ export function mountLinkAdd(container) {
     name.value = '';
     st.url = '';
     st.area = null;
+    st.group = null;
+    st.newGroup = false;
     error.textContent = '';
     renderTags();
     setOpen(false);
@@ -109,9 +143,9 @@ export function mountLinkAdd(container) {
 
 // ---- 一覧 ----
 // 直しているリンク。入力中の文字は描き直しても消えないように覚えておく（Firestore の更新で描き直されるため）
-const ed = { id: null, name: '', url: '', area: null, err: '', armed: false, focus: false };
+const ed = { id: null, name: '', url: '', area: null, group: null, newGroup: false, err: '', armed: false, focus: false };
 let armTimer = 0;
-const closeEdit = () => Object.assign(ed, { id: null, name: '', url: '', area: null, err: '', armed: false });
+const closeEdit = () => Object.assign(ed, { id: null, name: '', url: '', area: null, group: null, newGroup: false, err: '', armed: false });
 
 function editForm(x, rerender) {
   const had = ed.focus;
@@ -129,7 +163,7 @@ function editForm(x, rerender) {
   const submit = (e) => {
     e.preventDefault();
     try {
-      updateLink(x.id, { name: ed.name, url: ed.url, area: ed.area }).catch(fail('保存できませんでした'));
+      updateLink(x.id, { name: ed.name, url: ed.url, area: ed.area, group: ed.group }).catch(fail('保存できませんでした'));
       closeEdit();
     } catch (err) {
       ed.err = err.message || String(err);
@@ -157,7 +191,8 @@ function editForm(x, rerender) {
   const f = h('form', { class: 'tb-adder tb-link-form', autocomplete: 'off', novalidate: true, onsubmit: submit },
     name,
     url,
-    tagRow('用途', areaChips(ed.area, (a) => { ed.area = a; rerender(); })),
+    tagRow('用途', areaChips(ed.area, (a) => { ed.area = a; ed.group = null; ed.newGroup = false; rerender(); })),
+    groupRow(ed, rerender),
     h('div', { class: 'tb-adder-line' },
       h('button', { type: 'submit', class: 'tb-adder-ok' }, '保存'),
       h('button', { type: 'button', class: 'tb-btn', onclick: cancel }, 'やめる'),
@@ -223,11 +258,13 @@ function linkRow(x, rerender) {
       'aria-label': `${label(x)}を編集`,
       onclick: () => {
         closeEdit();
-        Object.assign(ed, { id: x.id, name: x.name || '', url: x.url, area: x.area || null, focus: true });
+        Object.assign(ed, { id: x.id, name: x.name || '', url: x.url, area: x.area || null, group: x.group || null, newGroup: false, focus: true });
         rerender();
       },
     }, PEN_SVG()));
 }
+
+const dropKey = (area, group) => `link:${JSON.stringify([area || null, group || null])}`;
 
 export function renderLinks(container, _tasks, opts) {
   opts.setContext({});
@@ -248,8 +285,12 @@ export function renderLinks(container, _tasks, opts) {
       h('h2', { class: 'tb-link-head', draggable: 'true', title: '引きずって塊の順を変える' },
         area ? areaDot(area) : null, h('span', {}, area || NONE_LABEL),
         h('span', { class: 'tb-link-count', 'aria-label': `${items.length}件` }, String(items.length))),
-      // 引きずって並べ替える（別の用途の中へ落とすと用途も変わる）。落とす先の名前＝'link:用途'（用途なし＝'link:'）
-      h('ul', { class: 'tb-link-list', 'data-drop': `link:${area || ''}`, 'data-drop-ok': true }, items.map((x) => linkRow(x, rerender)))));
+      // 引きずって並べ替える（別の塊へ落とすと用途・グループも変わる）。落とす先の名前＝'link:' ＋ [用途, グループ] の JSON
+      // （用途やグループの名前にどんな記号が入っても区切りを取り違えないため）
+      h('ul', { class: 'tb-link-list', 'data-drop': dropKey(area, null), 'data-drop-ok': true }, items.filter((x) => !x.group).map((x) => linkRow(x, rerender))),
+      groupsOf(area).map((g) => h('div', { class: 'tb-link-group' },
+        h('h3', { class: 'tb-link-ghead' }, h('span', {}, g), h('span', { class: 'tb-link-count' }, String(items.filter((x) => x.group === g).length))),
+        h('ul', { class: 'tb-link-list', 'data-drop': dropKey(area, g), 'data-drop-ok': true }, items.filter((x) => x.group === g).map((x) => linkRow(x, rerender)))))));
 
   const root = h('div', { class: 'tb-links' },
     sections.length
@@ -259,8 +300,8 @@ export function renderLinks(container, _tasks, opts) {
   enableDrag(root, {
     rootSel: '.tb-links',
     onDrop: ({ toKey, finalIds }) => {
-      const area = toKey.slice('link:'.length) || null;
-      reorderLinks(area, finalIds).catch(fail('並べ替えを保存できませんでした'));
+      const [area, group] = JSON.parse(toKey.slice('link:'.length));
+      reorderLinks(area, finalIds, group).catch(fail('並べ替えを保存できませんでした'));
       const entry = lastHistory();
       if (entry) showToast('並べ替えました', { action: '元に戻す', onAction: () => undo(entry) });
     },

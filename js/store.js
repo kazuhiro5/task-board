@@ -462,12 +462,15 @@ export function normUrl(raw) {
   return u.href;
 }
 
-// 用途は選ばなくてもよい（null＝用途なし。画面では一番下にまとめる）
-function linkFields({ area, name, url }) {
+// 用途は選ばなくてもよい（null＝用途なし。画面では一番下にまとめる）。
+// グループは用途の中をさらに分ける名前（null＝グループなし。用途の見出しのすぐ下に並ぶ）
+function linkFields({ area, name, url, group }) {
   const a = String(area || '').trim();
   const n = String(name || '').trim();
+  const g = String(group || '').trim();
   if (n.length > 40) throw new Error('名前は40文字までにしてください');
-  return { area: a || null, name: n, url: normUrl(url) };
+  if (g.length > 20) throw new Error('グループの名前は20文字までにしてください');
+  return { area: a || null, name: n, url: normUrl(url), group: g || null };
 }
 
 // 足す。おかしい時はその場で Error を投げる（addArea と同じ）。書き込みの Promise を返す
@@ -492,9 +495,9 @@ function setLinks(list) {
   links = list.slice().sort((a, b) => linkKey(a) - linkKey(b));
 }
 
-// リンクを引きずって並べ替えた時。ids＝落とした用途の中の新しい順。area＝その用途（null＝用途なし）。
-// 別の用途から来たリンクは用途も書き換える。順番が変わったものだけ書く
-export function reorderLinks(area, ids) {
+// リンクを引きずって並べ替えた時。ids＝落とした塊（用途×グループ）の中の新しい順。area＝その用途（null＝用途なし）、group＝そのグループ（null＝なし）。
+// 別の塊から来たリンクは用途・グループも書き換える。変わったものだけ書く
+export function reorderLinks(area, ids, group = null) {
   const byId = new Map(links.map((x) => [x.id, x]));
   const writes = [];
   ids.forEach((id, i) => {
@@ -503,10 +506,11 @@ export function reorderLinks(area, ids) {
     const patch = {};
     if (x.order !== i) patch.order = i;
     if ((x.area || null) !== area) patch.area = area;
+    if ((x.group || null) !== group) patch.group = group;
     if (Object.keys(patch).length) writes.push([id, patch]);
   });
   if (!writes.length) return Promise.resolve();
-  const back = writes.map(([id]) => [id, { order: byId.get(id).order ?? null, area: byId.get(id).area || null }]);
+  const back = writes.map(([id]) => [id, { order: byId.get(id).order ?? null, area: byId.get(id).area || null, group: byId.get(id).group || null }]);
   record(() => {
     const m = new Map(back);
     setLinks(links.map((x) => (m.has(x.id) ? { ...x, ...m.get(x.id) } : x)));

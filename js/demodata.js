@@ -144,7 +144,7 @@ export function demoData(t) {
   add({ title: '31日前に消したタスク', area: '家事', deletedAt: now - 31 * day });
 
   let k = 0;
-  const link = (area, name, url) => ({ id: `demoL${++k}`, area, name, url, createdAt: k });
+  const link = (area, name, url, group = null) => ({ id: `demoL${++k}`, area, name, url, group, createdAt: k });
   return {
     tasks,
     projects: [
@@ -154,8 +154,9 @@ export function demoData(t) {
     ],
     links: [
       link('AI開発', 'GitHub', 'https://github.com/'),
-      link('AI開発', 'Firebase コンソール', 'https://console.firebase.google.com/'),
-      link('AI開発', 'MDN（Webの仕様）', 'https://developer.mozilla.org/ja/'),
+      link('AI開発', 'Firebase コンソール', 'https://console.firebase.google.com/', '管理画面'),
+      link('AI開発', 'MDN（Webの仕様）', 'https://developer.mozilla.org/ja/', '調べもの'),
+      link('AI開発', 'task-board（見本）', 'https://kazuhiro5.github.io/task-board/?demo=1', '作ったアプリ'),
       link('就活', 'マイナビ', 'https://job.mynavi.jp/'),
       link('就活', 'リクナビ', 'https://job.rikunabi.com/'),
       link('就活', 'OfferBox', 'https://offerbox.jp/'),

@@ -818,3 +818,9 @@
 .hm-side .hm-pchip { min-width: 0; padding: 8px 10px; }
 .hm-side .hm-pchip b { font-size: 13px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .hm-side .hm-pchip small { font-size: 11px; }
+
+/* ---- リンク集：用途の中のグループ ---- */
+.tb-link-group { margin-top: 10px; }
+.tb-link-ghead { display: flex; align-items: center; gap: 6px; margin: 0 0 4px 22px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.tb-link-ghead::before { content: ''; width: 10px; border-top: 1px solid var(--line); }
+.tb-dragging .tb-link-list:empty { min-height: 36px; border: 1px dashed var(--line); border-radius: var(--radius); }
