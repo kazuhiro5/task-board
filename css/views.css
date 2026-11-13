@@ -824,3 +824,8 @@
 .tb-link-ghead { display: flex; align-items: center; gap: 6px; margin: 0 0 4px 22px; font-size: 12px; font-weight: 700; color: var(--muted); }
 .tb-link-ghead::before { content: ''; width: 10px; border-top: 1px solid var(--line); }
 .tb-dragging .tb-link-list:empty { min-height: 36px; border: 1px dashed var(--line); border-radius: var(--radius); }
+
+/* ---- 繰り返しの予定の回（保存していない先の回） ---- */
+.tb-card.is-virtual { background: transparent; border-style: dashed; }
+.tb-card.is-virtual .tb-title { color: var(--muted); }
+.tb-tag--plan { color: var(--muted); border: 1px dashed var(--line); }

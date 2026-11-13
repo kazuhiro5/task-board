@@ -11,6 +11,7 @@ import { h, isOpen, compareTasks, taskCard, md } from './card.js';
 import { sorter } from './sort.js';
 import { enableDrag, dayDrag } from './dnd.js';
 import { filterPick, matchFilter, projectToggle, visibleTasks } from './filter.js';
+import { withRepeats } from './repeats.js';
 
 let weekOffset = 0; // 0＝今週、-1＝前の週、1＝次の週
 let pickedDay = null; // 見出しを押して「ここに追加」にした日
@@ -52,9 +53,10 @@ export function noDateStrip(tasks, cmp, opts) {
 }
 
 export function renderWeek(container, allTasks, opts) {
-  const tasks = visibleTasks(allTasks, weekFilter).filter((x) => matchFilter(x, weekFilter));
   const t = todayKey();
   const days = weekDays(addDays(t, weekOffset * 7));
+  // 繰り返しの先の回（予定）も、その週の分だけ足す
+  const tasks = withRepeats(visibleTasks(allTasks, weekFilter).filter((x) => matchFilter(x, weekFilter)), days[0], days[6]);
   if (pickedDay && !days.includes(pickedDay)) pickedDay = null;
   opts.setContext({ doDate: pickedDay || t, ...(weekFilter && weekFilter.by !== 'status' ? { [weekFilter.by]: weekFilter.name } : {}) });
 

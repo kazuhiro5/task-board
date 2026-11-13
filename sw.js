@@ -4,7 +4,7 @@
 // - それ以外（Firestore・ログインの通信など）：横取りしない
 // ファイルを足した・中身を変えた時は VERSION を上げる。上げると全部まとめて入れ替わる（JSの版ずれを防ぐ）。
 
-const VERSION = 'v70';
+const VERSION = 'v71';
 const CACHE = `task-board-${VERSION}`;
 const FIREBASE_PREFIX = 'https://www.gstatic.com/firebasejs/11.0.2/';
 
@@ -38,6 +38,7 @@ const APP_FILES = [
   './js/views/links.js',
   './js/views/search.js',
   './js/views/home.js',
+  './js/views/repeats.js',
   './js/gcal.js',
   './js/demodata.js',
   './js/calconnect.js',

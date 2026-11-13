@@ -10,7 +10,7 @@
 // 保存・削除は待たずに閉じる（Firestore はオフラインだと Promise が終わらないが、端末内には即座に入る）。
 // 失敗した時は、閉じた後なので入力欄のエラー欄（.add-error）に短く出す。
 // 閉じたら、開いた元のカードにフォーカスを戻す。
-import { updateTask, deleteTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo, parentChoices } from './store.js';
+import { updateTask, deleteTask, skipRepeatTask, projectNames, getSprints, sprintState, areaNames, lastHistory, undo, parentChoices } from './store.js';
 import { showToast } from './toast.js';
 import { todayKey, addDays, relLabel } from './dates.js';
 import { repeatEditor, normRepeat } from './repeat.js';
@@ -326,19 +326,29 @@ export function openEdit(task) {
   memoBox.value = v.memo || '';
 
   const delBtn = el('button', { type: 'button', class: 'edit-delete', text: '削除' });
+  const doDelete = (onlyThis) => {
+    closeEdit();
+    (onlyThis ? skipRepeatTask(task.id) : deleteTask(task.id)).catch((err) => {
+      showError(`「${orig.title}」を削除できませんでした（${err.message || err}）`);
+    });
+    const entry = lastHistory();
+    showToast(onlyThis ? 'この回を消しました（次の回からは続きます）' : task.repeat ? '繰り返しをやめました' : '削除しました', { action: '元に戻す', onAction: () => undo(entry) });
+  };
   delBtn.addEventListener('click', () => {
+    // 繰り返し：「この回だけ」か「これから先を全部やめる」かを選ぶ（済んだ回の記録はどちらも残る）
+    if (task.repeat && task.status !== 'done') {
+      const only = el('button', { type: 'button', class: 'edit-delete', text: 'この回だけ消す', onclick: () => doDelete(true) });
+      const all = el('button', { type: 'button', class: 'edit-delete is-armed', text: 'これから先を全部やめる', onclick: () => doDelete(false) });
+      delBtn.replaceWith(el('span', { class: 'edit-del-choice' }, [only, all]));
+      return;
+    }
     if (!armed) {
       armed = true;
       delBtn.textContent = 'もう一度押すと削除';
       delBtn.classList.add('is-armed');
       return;
     }
-    closeEdit();
-    deleteTask(task.id).catch((err) => {
-      showError(`「${orig.title}」を削除できませんでした（${err.message || err}）`);
-    });
-    const entry = lastHistory();
-    showToast('削除しました', { action: '元に戻す', onAction: () => undo(entry) });
+    doDelete(false);
   });
   const closeBtn = el('button', { type: 'button', class: 'edit-close', text: '閉じる', onclick: () => dismissEdit() });
   const expandBtn = el('button', {

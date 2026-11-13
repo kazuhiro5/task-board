@@ -13,6 +13,7 @@
 import { todayKey, toKey, addDays, label } from '../dates.js';
 import { h, isOpen, taskCard, sectionHead } from './card.js';
 import { filterPick, projectToggle, visibleTasks } from './filter.js';
+import { withRepeats } from './repeats.js';
 import { sorter } from './sort.js';
 import { enableDrag, dropToDay } from './dnd.js';
 import { updateMany, areaNames, projectNames, lastHistory, undo } from '../store.js';
@@ -186,8 +187,9 @@ const dayCard = (x) => (x.doDate ? { hide: ['doDate'] } : { dueMark: true });
 const placeKey = (x) => x.doDate || x.dueDate;
 
 export function renderToday(container, rawTasks, opts) {
-  const tasks = visibleTasks(rawTasks, filter);
   const t = todayKey();
+  // 繰り返しの先の回（予定）も、出している範囲だけ足す（もっと見るを開いた時は60日先まで）
+  const tasks = withRepeats(visibleTasks(rawTasks, filter), addDays(t, 1), addDays(t, showFar ? 60 : AHEAD));
   const tomorrow = addDays(t, 1);
   const limit = addDays(t, AHEAD);
   const open = tasks.filter(isOpen);

@@ -661,11 +661,9 @@ export async function updateTask(id, patch) {
     const nowDone = patch.status === 'done';
     const rep = 'repeat' in patch ? p.repeat : normRepeat(cur.repeat);
     if (!wasDone && nowDone && rep) {
-      const next = nextOf({ ...cur, ...p }, rep);
+      const next = freeNextOf({ ...cur, ...p }, rep);
       const nid = `${repeatRoot(id)}_${next.doDate}`;
-      const have = allTasks.find((x) => x.id === nid);
-      if (!have) ops.push({ type: 'set', id: nid, data: next });
-      else if (have.deletedAt) ops.push({ type: 'update', id: nid, data: { deletedAt: null, updatedAt: Date.now() } });
+      ops.push({ type: 'set', id: nid, data: next });
       p.completedNextId = nid;
     } else if (wasDone && !nowDone && cur.completedNextId) {
       const nx = allTasks.find((x) => x.id === cur.completedNextId);
@@ -681,6 +679,62 @@ export async function updateTask(id, patch) {
   if (!ops.length) return backend.update(id, p);
   ops.push({ type: 'update', id, data: p });
   return backend.batch(ops);
+}
+
+// 次の回のうち、まだ文書の無い日（画面の予定でチェックした回・この回だけ消した回は飛ばす。
+// 飛ばさないと、その日の文書が既にあるので次の回が作られず、繰り返しが途切れるため）
+function freeNextOf(t, rep) {
+  const root = repeatRoot(t.id);
+  let n = nextOf(t, rep);
+  for (let i = 0; i < 400 && allTasks.some((x) => x.id === `${root}_${n.doDate}`); i++) n = nextOf({ ...t, doDate: n.doDate, dueDate: n.dueDate }, rep);
+  return n;
+}
+
+// ---- 繰り返しの予定（画面にだけ出す先の回。views/repeats.js） ----
+// 先の回は保存しない（やらなかった回が溜まらず、保存と読み込みの量も増えないため）。
+// チェックした回・消した回だけ、id「根_日付」の文書として保存する。その日の予定は文書があれば出さない。
+export function takenIds() {
+  return new Set(allTasks.map((x) => x.id));
+}
+function occurrenceData(v, extra) {
+  const now = Date.now();
+  return {
+    ...normalize({ title: v.title, area: v.area, project: v.project, priority: v.priority, memo: v.memo, doDate: v.doDate, dueDate: v.dueDate }),
+    repeatOf: v.headId, createdAt: now, updatedAt: now, ...extra,
+  };
+}
+// 予定の回をチェックした：済みの文書として保存する（繰り返しの決まりは持たせない。元のタスクが続きを持つため）
+export function checkOccurrence(v) {
+  record(() => purgeOccurrence(v));
+  return backend.batch([{ type: 'set', id: v.id, data: occurrenceData(v, { status: 'done', completedAt: Date.now() }) }]);
+}
+// 予定の回を消した（この回だけ）：ゴミ箱に入れた文書として保存する（ゴミ箱から戻すと、その日のふつうのタスクになる）
+export function skipOccurrence(v) {
+  record(() => purgeOccurrence(v));
+  return backend.batch([{ type: 'set', id: v.id, data: occurrenceData(v, { deletedAt: Date.now() }) }]);
+}
+// 保存した回を消して、予定に戻す（チェックを外した・元に戻した）
+export function purgeOccurrence(v) {
+  const was = allTasks.find((x) => x.id === v.id);
+  if (was) { const { id: _drop, ...data } = was; record(() => backend.batch([{ type: 'set', id: v.id, data }])); }
+  return backend.batch([{ type: 'delete', id: v.id }]);
+}
+// 繰り返しの今の回を「この回だけ」消す：次の回を作ってから、この回をゴミ箱へ（繰り返しは続く）
+export function skipRepeatTask(id) {
+  const cur = allTasks.find((x) => x.id === id);
+  const rep = normRepeat(cur?.repeat);
+  if (!cur || !rep) return deleteTask(id);
+  const next = freeNextOf(cur, rep);
+  const nid = `${repeatRoot(id)}_${next.doDate}`;
+  const now = Date.now();
+  record(() => backend.batch([
+    { type: 'delete', id: nid },
+    { type: 'update', id, data: { deletedAt: null, updatedAt: Date.now() } },
+  ]));
+  return backend.batch([
+    { type: 'set', id: nid, data: next },
+    { type: 'update', id, data: { deletedAt: now, updatedAt: now } },
+  ]);
 }
 
 // 繰り返しの根：id の末尾に付けた日付（_YYYY-MM-DD、重なっていても全部）を外したもの

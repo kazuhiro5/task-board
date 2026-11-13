@@ -96,3 +96,5 @@ body.has-detail #appRoot { padding-right: calc(var(--detail-w) + 16px); }
 .edit-like-add .tag-row .tag-select { flex: 0 1 14em; min-width: 0; }
 .edit-like-add .tag-row .tag-newproject { flex: 0 0 10em; }
 .edit-like-add .tag-row .tag-date { flex: none; }
+
+.edit-del-choice { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -1,5 +1,5 @@
 // 画面（今日・週・一覧・プロジェクト）で共通に使う部品：タスクの1行・並べ替え・区分の見出し。担当：画面役。
-import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo, parentPath, wbsCode } from '../store.js';
+import { updateTask, areaColor, deleteTask, deleteArea, deleteProject, getTasks, lastHistory, undo, parentPath, wbsCode, checkOccurrence, skipOccurrence, purgeOccurrence, skipRepeatTask, repeatRoot } from '../store.js';
 import { showToast } from '../toast.js';
 import { openEdit } from '../edit.js';
 import { todayKey, relLabel, fromKey } from '../dates.js';
@@ -108,6 +108,19 @@ function showCardError(cardEl, msg) {
 }
 
 export function toggleDone(task, cardEl) {
+  const failed = (e) => {
+    console.warn('[task-board] 完了の切り替えに失敗', e);
+    showCardError(cardEl, '保存できませんでした。もう一度押してください');
+  };
+  // 繰り返しの予定の回（保存していない）：チェックした時に、済みとして保存する
+  if (task.virtual) { checkOccurrence(task).catch(failed); return; }
+  // 予定からチェックした回（今日以降）：チェックを外すと保存した分を消し、予定に戻す。
+  // ただし今の回より前の日は予定に出ない（消すと見えなくなる）ので、ふつうの未完了のタスクとして残す
+  if (task.repeatOf && !task.repeat && !isOpen(task) && task.doDate && task.doDate >= todayKey()) {
+    const root = repeatRoot(task.id);
+    const head = getTasks().find((x) => x.repeat && isOpen(x) && repeatRoot(x.id) === root);
+    if (head && (!head.doDate || head.doDate < task.doDate)) { purgeOccurrence(task).catch(failed); return; }
+  }
   // 完了にする時は前の状態（進行中・待ちなど）を prevStatus に残し、戻す時にそこへ戻す
   const patch = isOpen(task)
     ? { status: 'done', prevStatus: task.status || 'todo' }
@@ -229,7 +242,8 @@ export function taskCard(task, opts = {}) {
     meta.push(h('span', { class: 'tb-tag tb-phase', title: `フェーズ${task.phase}` }, `F${task.phase}`));
   }
 
-  const cls = 'tb-card' + (done ? ' is-done' : '') + (opts.dueMark ? ' is-due-entry' : '');
+  if (task.virtual) meta.unshift(h('span', { class: 'tb-tag tb-tag--plan' }, '予定'));
+  const cls = 'tb-card' + (done ? ' is-done' : '') + (opts.dueMark ? ' is-due-entry' : '') + (task.virtual ? ' is-virtual' : '');
   const card = h('div', { class: cls, 'data-id': task.id },
     h('button', {
       type: 'button',
@@ -240,7 +254,8 @@ export function taskCard(task, opts = {}) {
     }, h('span', { class: 'tb-check-mark', 'aria-hidden': 'true' }, done ? '✓' : '')),
     h('button', {
       type: 'button', class: 'tb-body', 'aria-expanded': 'false', 'aria-controls': `tb-memo-${++memoSeq}`,
-      onclick: () => pressBody(task, card),
+      // 予定の回は保存していないので、押すと元の繰り返し（今の回）を編集する
+      onclick: () => (task.virtual ? openEdit(getTasks().find((x) => x.id === task.headId) || task) : pressBody(task, card)),
     },
       h('span', { class: 'tb-line' },
         task.area && !hide.has('area') && !opts.areaInMeta ? areaMark(task.area) : null,
@@ -260,12 +275,16 @@ export function taskCard(task, opts = {}) {
       onclick: (e) => {
         e.stopPropagation();
         const fail = (err) => showToast(`削除できませんでした（${err.message || err}）`);
-        deleteTask(task.id).catch(fail);
+        // 繰り返しは「この回だけ」消す（次の回からは続く）。繰り返しごとやめるのは編集の「削除」から
+        if (task.virtual) skipOccurrence(task).catch(fail);
+        else if (task.repeat) skipRepeatTask(task.id).catch(fail);
+        else deleteTask(task.id).catch(fail);
         const entry = lastHistory();
-        showToast('ゴミ箱へ移しました', { action: '元に戻す', onAction: () => undo(entry) });
+        showToast(task.repeat ? 'この回を消しました（次の回からは続きます）' : 'ゴミ箱へ移しました', { action: '元に戻す', onAction: () => undo(entry) });
       },
     }, TRASH_SVG.cloneNode(true)));
   }
+  if (task.virtual) card.dataset.drag = 'no';
   if (openId === task.id) setExpanded(card, task, true);
   return card;
 }
