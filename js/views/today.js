@@ -34,7 +34,8 @@ function saveFlag(k, v) {
 }
 
 // 持ち越し：畳んだ1行＋中身（期限切れと同じ見た目。今日・明日へ引きずって動かせる）。
-// 見出しの横に、やる日をまとめて動かすボタン（締切は変えない。持ち越しは締切を過ぎていないため）
+// 開いている時だけ、見出しの横にやる日をまとめて動かすボタン（締切は変えない。持ち越しは締切を過ぎていないため。
+// 閉じている時も出すと、毎日目に入って邪魔になるため）
 function carryBox(list, t, opts) {
   if (!list.length) return null;
   const open = loadFlag('tb.carryOpen');
@@ -42,13 +43,13 @@ function carryBox(list, t, opts) {
     h('h2', { class: 'tb-od-head' },
       h('button', {
         type: 'button', class: 'tb-od-btn tb-carry-btn', 'aria-expanded': String(open), 'aria-controls': 'tb-carry-body',
-        onclick: () => { saveFlag('tb.carryOpen', !open); opts.rerender(); },
+        onclick: () => { saveFlag('tb.carryOpen', !open); armed = null; opts.rerender(); },
       },
       h('span', { class: 'tb-od-title' }, '持ち越し'),
       h('span', { class: 'tb-od-n' }, `${list.length}件`),
       h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'))),
-    bulkButtons('carry', list, t, opts));
-  if (!open) return h('section', { class: 'tb-sec tb-od tb-carry', 'data-sec': 'carry' }, head, bulkHint('carry', list));
+    open ? bulkButtons('carry', list, t, opts) : null);
+  if (!open) return h('section', { class: 'tb-sec tb-od tb-carry', 'data-sec': 'carry' }, head);
   return h('section', { class: 'tb-sec tb-od tb-carry is-open', 'data-sec': 'carry', 'data-drop': 'carry', 'data-drop-ok': false },
     head, bulkHint('carry', list),
     h('div', { class: 'tb-od-body', id: 'tb-carry-body' },
@@ -134,7 +135,7 @@ function bulkHint(kind, list) {
   return h('p', { class: 'tb-od-hint', role: 'status' }, `もう一度押すと${list.length}件の${FIELD[kind].name}を${b.done}動かします`);
 }
 
-// 期限切れ：畳んだ1行＋中身。見出しの横に、締切をまとめて動かすボタン
+// 期限切れ：畳んだ1行＋中身。開いている時だけ、見出しの横に締切をまとめて動かすボタン
 function overdueBox(list, t, opts) {
   if (!list.length) return null;
   const open = loadOverdueOpen();
@@ -145,13 +146,13 @@ function overdueBox(list, t, opts) {
         class: 'tb-od-btn',
         'aria-expanded': String(open),
         'aria-controls': 'tb-od-body',
-        onclick: () => { saveOverdueOpen(!open); opts.rerender(); },
+        onclick: () => { saveOverdueOpen(!open); armed = null; opts.rerender(); },
       },
       h('span', { class: 'tb-od-title' }, '期限切れ'),
       h('span', { class: 'tb-od-n' }, `${list.length}件`),
       h('span', { class: 'tb-od-chev', 'aria-hidden': 'true' }, open ? '▾' : '▸'))),
-    bulkButtons('overdue', list, t, opts));
-  if (!open) return h('section', { class: 'tb-sec tb-od', 'data-sec': 'overdue' }, head, bulkHint('overdue', list));
+    open ? bulkButtons('overdue', list, t, opts) : null);
+  if (!open) return h('section', { class: 'tb-sec tb-od', 'data-sec': 'overdue' }, head);
   const cards = list.map((x) => {
     const c = taskCard(x);
     c.dataset.drag = 'no';
